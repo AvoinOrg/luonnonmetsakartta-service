@@ -23,6 +23,7 @@ pytest-order = "^1.3.0"
 pydantic-settings = "^2.6.1"
 pydantic = "^2.9.2"
 rich = {extras = ["jupyter"], version = "^13.9.4"}
+alembic = "^1.14.0"
 
 [tool.poetry.group.dev.dependencies]
 jupyter = "^1.1.1"
