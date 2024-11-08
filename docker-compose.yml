@@ -1,6 +1,6 @@
 services:
   app:
-    container_name: python-docker-quickstart
+    container_name: luonnonmetsakartta-service
     build: .
     env_file:
       - ./.env
