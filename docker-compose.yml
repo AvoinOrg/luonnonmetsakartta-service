@@ -13,7 +13,60 @@ services:
       # - ./.conda-pkgs:/root/conda/pkgs
       - ./.vscode-server:/root/.vscode-server
       - ${GIT_SSH_KEY}:/root/.ssh/id_rsa:z
-    entrypoint: ["/bin/bash", "/app/docker-entrypoint.sh"]
+    entrypoint: [ "/bin/bash", "/app/docker-entrypoint.sh" ]
+    networks:
+      - luonnonmetsakartta-net
 
-# volumes:
-#   poetry-cache:
+  postgis-test:
+    image: kartoza/postgis:${TEST_POSTGRES_VERSION}
+    container_name: ${TEST_POSTGRES_HOST}
+    hostname: ${TEST_POSTGRES_HOST}
+    env_file:
+      - .env
+    # volumes:
+    # - ${CERT_DIR}/fullchain.pem:${CERT_DIR}/fullchain.pem
+    # - ${CERT_DIR}/privkey.pem:${CERT_DIR}/privkey.pem
+    # - ${CERT_DIR}/server.crt:${CERT_DIR}/server.crt
+    #   - /mnt/postgis-data:/var/lib/postgresql
+    ports:
+      - ${TEST_POSTGRES_PORT}:5432
+    environment:
+        POSTGRES_USER: ${TEST_POSTGRES_USER}
+        POSTGRES_DB: ${TEST_POSTGRES_DB}
+        POSTGRES_PASSWORD: ${TEST_POSTGRES_PASSWORD}
+        POSTGRES_HOST: ${TEST_POSTGRES_HOST}
+        POSTGRES_PORT: 5432
+
+        FORCE_SSL: FALSE
+      # - SSL_DIR=${CERT_DIR}
+      # - SSL_CERT_FILE=${CERT_DIR}/fullchain.pem
+      # - SSL_KEY_FILE=${CERT_DIR}/privkey.pem
+      # - SSL_CA_FILE=${CERT_DIR}/server.crt
+    restart: unless-stopped
+    # healthcheck:
+    #   test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB} -h localhost -p 5432"]
+    #   interval: 30s
+    #   timeout: 10s
+    #   retries: 3
+    #   start_period: 10s
+    networks:
+      - luonnonmetsakartta-net
+    # shm_size: ${POSTGRES_CONTAINER_MEM}
+    # deploy:
+    #   resources:
+    #     limits:
+    #       memory: ${POSTGRES_CONTAINER_MEM}
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+networks:
+  luonnonmetsakartta-net:
+    driver: bridge
+    ipam:
+      driver: default
+      # config:
+      #   - subnet: "192.168.0.0/24"
+      #     gateway: "192.168.0.1"
