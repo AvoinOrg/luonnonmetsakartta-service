@@ -1,4 +1,6 @@
 from logging.config import fileConfig
+import alembic_postgresql_enum
+import os
 
 from sqlalchemy import engine_from_config
 from sqlalchemy import pool
@@ -7,6 +9,7 @@ from alembic import context
 from app.db.models.base import Base
 from app.db.models.layer import Layer
 
+env_vars = os.environ
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.
 config = context.config
@@ -28,6 +31,34 @@ is_testing = config.get_main_option("is_testing", "False")
 # can be acquired:
 # my_important_option = config.get_main_option("my_important_option")
 # ... etc.
+
+
+def get_url():
+    if is_testing == "True":
+        password = env_vars["TEST_POSTGRES_PASSWORD"]
+
+        # You can similarly access other parts of the URL
+        username = env_vars["TEST_POSTGRES_USER"]
+        host = env_vars["TEST_POSTGRES_HOST"]
+        port = env_vars["TEST_POSTGRES_PORT"]
+        database = env_vars["TEST_POSTGRES_DB"]
+
+    else:
+        password = env_vars["POSTGRES_PASSWORD"]
+
+        # You can similarly access other parts of the URL
+        username = env_vars["POSTGRES_USER"]
+        host = env_vars["POSTGRES_HOST"]
+        port = env_vars["POSTGRES_PORT"]
+        database = env_vars["POSTGRES_DB"]
+
+        # If you need to reconstruct the URL string manually without masking:
+    db_url = f"postgresql+psycopg2://{username}:{password}@{host}:{port}/{database}"
+
+    return db_url
+
+
+config.set_main_option("sqlalchemy.url", get_url())
 
 
 def run_migrations_offline() -> None:
@@ -68,9 +99,7 @@ def run_migrations_online() -> None:
     )
 
     with connectable.connect() as connection:
-        context.configure(
-            connection=connection, target_metadata=target_metadata
-        )
+        context.configure(connection=connection, target_metadata=target_metadata)
 
         with context.begin_transaction():
             context.run_migrations()
