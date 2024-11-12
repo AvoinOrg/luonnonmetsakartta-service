@@ -7,7 +7,9 @@ from sqlalchemy import pool
 from alembic import context
 
 from app.db.models.base import Base
-from app.db.models.layer import Layer
+from app.db.models.forest_layer import ForestLayer
+from app.db.models.forest_area import ForestArea
+from app.utils.general import str_to_bool
 
 env_vars = os.environ
 # this is the Alembic Config object, which provides
@@ -36,21 +38,24 @@ is_testing = config.get_main_option("is_testing", "False")
 def get_url():
     if is_testing == "True":
         password = env_vars["TEST_POSTGRES_PASSWORD"]
-
-        # You can similarly access other parts of the URL
         username = env_vars["TEST_POSTGRES_USER"]
         host = env_vars["TEST_POSTGRES_HOST"]
         port = env_vars["TEST_POSTGRES_PORT"]
         database = env_vars["TEST_POSTGRES_DB"]
 
     else:
-        password = env_vars["POSTGRES_PASSWORD"]
-
-        # You can similarly access other parts of the URL
-        username = env_vars["POSTGRES_USER"]
-        host = env_vars["POSTGRES_HOST"]
-        port = env_vars["POSTGRES_PORT"]
-        database = env_vars["POSTGRES_DB"]
+        if str_to_bool(env_vars.get("IS_PRODUCTION", "False")):
+            password = env_vars["POSTGRES_PASSWORD"]
+            username = env_vars["POSTGRES_USER"]
+            host = env_vars["POSTGRES_HOST"]
+            port = env_vars["POSTGRES_PORT"]
+            database = env_vars["POSTGRES_DB"]
+        else:
+            password = env_vars["DEV_POSTGRES_PASSWORD"]
+            username = env_vars["DEV_POSTGRES_USER"]
+            host = env_vars["DEV_POSTGRES_HOST"]
+            port = env_vars["DEV_POSTGRES_PORT"]
+            database = env_vars["DEV_POSTGRES_DB"]
 
         # If you need to reconstruct the URL string manually without masking:
     db_url = f"postgresql+psycopg2://{username}:{password}@{host}:{port}/{database}"
@@ -59,6 +64,14 @@ def get_url():
 
 
 config.set_main_option("sqlalchemy.url", get_url())
+
+
+def include_object(object, name, type_, reflected, compare_to):
+    if type_ == "table" and reflected and compare_to is None:
+        # Exclude tables that are reflected from the database but not in metadata
+        # This ignores extension-created tables like PostGIS tables
+        return False
+    return True
 
 
 def run_migrations_offline() -> None:
@@ -78,6 +91,7 @@ def run_migrations_offline() -> None:
         url=url,
         target_metadata=target_metadata,
         literal_binds=True,
+        include_object=include_object,
         dialect_opts={"paramstyle": "named"},
     )
 
@@ -99,7 +113,11 @@ def run_migrations_online() -> None:
     )
 
     with connectable.connect() as connection:
-        context.configure(connection=connection, target_metadata=target_metadata)
+        context.configure(
+            connection=connection,
+            target_metadata=target_metadata,
+            include_object=include_object,
+        )
 
         with context.begin_transaction():
             context.run_migrations()
