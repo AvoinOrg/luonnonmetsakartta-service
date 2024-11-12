@@ -1,6 +1,9 @@
 import asyncio
 import pytest
 import os
+import importlib
+import pkgutil
+import inspect
 from contextlib import asynccontextmanager
 from sqlalchemy.pool import NullPool
 from sqlalchemy.ext.asyncio import (
@@ -11,8 +14,10 @@ from collections.abc import AsyncGenerator
 from alembic.config import Config
 from alembic import command
 from sqlalchemy import text
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db import connection
+from app.db.models.base import Base 
 from app.utils.logger import get_logger
 from app.types.general import used_db_types
 
@@ -110,20 +115,25 @@ async def async_setup():
         assert TEST_POSTGRES_HOST in url
         assert TEST_POSTGRES_PORT in url
 
+        alembic_cfg = Config("alembic.ini")
+        alembic_cfg.set_main_option("is_testing", "True")
         await session.begin()
-        await drop_all_tables_and_types(session)
+        # await drop_all_tables_and_types(session)
+        command.downgrade(alembic_cfg, 'base')
         await session.commit()
 
         # Run Alembic migrations to create tables
-        alembic_cfg = Config("alembic.ini")  # Adjust the path to your alembic.ini
-        alembic_cfg.set_main_option("is_testing", "True")
         command.upgrade(alembic_cfg, "head")
 
 
 async def async_teardown():
     async with connection.get_async_context_db() as session:
         await session.begin()
-        await drop_all_tables_and_types(session)
+        # await drop_all_tables_and_types(session)
+        alembic_cfg = Config("alembic.ini")
+        alembic_cfg.set_main_option("is_testing", "True")
+        # Downgrade to the base revision
+        command.downgrade(alembic_cfg, 'base')
         await session.commit()
 
 
@@ -137,23 +147,28 @@ def setup_and_teardown(request):
     asyncio.run(async_teardown())
 
 
-async def drop_all_tables_and_types(conn):
-    # Drop all tables in the database
-    await conn.execute(
-        text(
-            """DO
-                $$
-                DECLARE
-                    r RECORD;
-                BEGIN
-                    -- Loop through each table in the specified schema
-                    FOR r IN (SELECT tablename FROM pg_tables WHERE schemaname = 'public') LOOP
-                        EXECUTE 'DROP TABLE IF EXISTS public.' || quote_ident(r.tablename) || ' CASCADE';
-                    END LOOP;
-                END
-                $$;"""
-        )
-    )
+# async def drop_all_tables_and_types(conn: AsyncSession):
+#     # Dynamically import all model modules and collect model classes
+#     model_classes = []
+#     models_package = importlib.import_module('app.db.models')
+    
+#     for _, name, _ in pkgutil.iter_modules(models_package.__path__):
+#         if name != 'base':  # Skip base.py
+#             module = importlib.import_module(f'app.db.models.{name}')
+#             # Find all classes that inherit from Base
+#             for _, obj in inspect.getmembers(module):
+#                 if inspect.isclass(obj) and issubclass(obj, Base) and obj != Base:
+#                     model_classes.append(obj)
 
-    for db_type in used_db_types:
-        await conn.execute(text(f"DROP TYPE IF EXISTS public.{db_type} CASCADE;"))
+#     # Get table names from model classes
+#     table_names = [model.__tablename__ for model in model_classes]
+    
+#     # Drop tables one by one
+#     for table in table_names:
+#         await conn.execute(text(f"DROP TABLE IF EXISTS {table} CASCADE"))
+    
+#     # Drop custom types
+#     for db_type in used_db_types:
+#         await conn.execute(text(f"DROP TYPE IF EXISTS {db_type} CASCADE"))
+    
+#     await conn.commit()
