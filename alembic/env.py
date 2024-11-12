@@ -5,6 +5,9 @@ import os
 from sqlalchemy import engine_from_config
 from sqlalchemy import pool
 from alembic import context
+from alembic.autogenerate import renderers
+import geoalchemy2
+from geoalchemy2 import types as geo_types
 
 from app.db.models.base import Base
 from app.db.models.forest_layer import ForestLayer
@@ -66,12 +69,62 @@ def get_url():
 config.set_main_option("sqlalchemy.url", get_url())
 
 
+def is_geometry_index(object, name, type_):
+    # Check if it's an index and name contains geometry-related patterns
+    # Use "_manual_" in index name to skip manually created indices
+    if type_ == "index" and "_manual_" not in name.lower():
+        geometry_patterns = [
+            "_geometry",
+            "_geom_",
+            "geography_columns",
+            "geometry_columns",
+        ]
+        return any(pattern in name.lower() for pattern in geometry_patterns)
+    return False
+
+
 def include_object(object, name, type_, reflected, compare_to):
-    if type_ == "table" and reflected and compare_to is None:
-        # Exclude tables that are reflected from the database but not in metadata
-        # This ignores extension-created tables like PostGIS tables
+    # Skip geometry indices
+    if is_geometry_index(object, name, type_):
         return False
+
+    # Skip tables that exist in DB but not in models
+    if type_ == "table" and reflected and compare_to is None:
+        return False
+
     return True
+
+
+def render_item(type_, obj, autogen_context):
+    """Custom rendering for specific items during autogeneration."""
+    if type_ == 'type':
+        if isinstance(obj, geo_types.Geometry):
+            autogen_context.imports.add('from geoalchemy2 import Geometry')
+            args = []
+            if obj.geometry_type != 'GEOMETRY':
+                args.append(repr(obj.geometry_type))
+            if obj.srid != -1:
+                args.append(f"srid={obj.srid}")
+            if obj.dimension != 2:
+                args.append(f"dimension={obj.dimension}")
+            if obj.spatial_index is not None:
+                args.append(f"spatial_index={obj.spatial_index}")
+            return f"Geometry({', '.join(args)})"
+        elif isinstance(obj, geo_types.Geography):
+            autogen_context.imports.add('from geoalchemy2 import Geography')
+            args = []
+            if obj.geometry_type != 'GEOGRAPHY':
+                args.append(repr(obj.geometry_type))
+            if obj.srid != -1:
+                args.append(f"srid={obj.srid}")
+            if obj.dimension != 2:
+                args.append(f"dimension={obj.dimension}")
+            if obj.spatial_index is not None:
+                args.append(f"spatial_index={obj.spatial_index}")
+            return f"Geography({', '.join(args)})"
+    # Return False to let Alembic use the default rendering for other types
+    return False
+
 
 
 def run_migrations_offline() -> None:
@@ -92,6 +145,7 @@ def run_migrations_offline() -> None:
         target_metadata=target_metadata,
         literal_binds=True,
         include_object=include_object,
+        render_item=render_item,
         dialect_opts={"paramstyle": "named"},
     )
 
@@ -116,6 +170,7 @@ def run_migrations_online() -> None:
         context.configure(
             connection=connection,
             target_metadata=target_metadata,
+            render_item=render_item,
             include_object=include_object,
         )
 
