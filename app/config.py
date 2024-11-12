@@ -5,11 +5,33 @@ from pydantic_settings import BaseSettings
 from sqlalchemy.engine import URL
 from dotenv import load_dotenv
 
+from app.utils.general import str_to_bool
 from app.utils.logger import get_logger
 
 load_dotenv()
 env_vars = os.environ
 logger = get_logger(__name__)
+
+
+def get_pg_url(is_prod):
+    if is_prod:
+        return URL.create(
+            "postgresql+asyncpg",
+            username=env_vars["POSTGRES_USER"],
+            password=env_vars["POSTGRES_PASSWORD"],
+            host=env_vars["POSTGRES_HOST"],
+            port=int(env_vars["POSTGRES_PORT"]),
+            database=env_vars["POSTGRES_DB"],
+        )
+    else:
+        return URL.create(
+            "postgresql+asyncpg",
+            username=env_vars["DEV_POSTGRES_USER"],
+            password=env_vars["DEV_POSTGRES_PASSWORD"],
+            host=env_vars["DEV_POSTGRES_HOST"],
+            port=int(env_vars["DEV_POSTGRES_PORT"]),
+            database=env_vars["DEV_POSTGRES_DB"],
+        )
 
 
 class Settings(BaseSettings):
@@ -20,14 +42,9 @@ class Settings(BaseSettings):
     Returns:
     instance of Settings
     """
-    pg_url: URL = URL.create(
-        "postgresql+asyncpg",
-        username=env_vars["POSTGRES_USER"],
-        password=env_vars["POSTGRES_PASSWORD"],
-        host=env_vars["POSTGRES_HOST"],  # Use the PgBouncer service name for STATE DB
-        port=int(env_vars["POSTGRES_PORT"]),  # Default PgBouncer port
-        database=env_vars["POSTGRES_DB"],
-    )
+
+    is_production: bool = str_to_bool(env_vars.get("IS_PRODUCTION", "False"))
+    pg_url: URL = get_pg_url(is_production)
 
 
 @lru_cache
