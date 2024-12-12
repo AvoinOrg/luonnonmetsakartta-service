@@ -17,7 +17,7 @@ def get_index_name_for_id(id: str) -> str:
 
     index_suffix = layer_uuid.hex
     
-    index_name = f"idx_area_geom_layer_{index_suffix}"[:63]
+    index_name = f"idx_forest_area_geom_layer_{index_suffix}"[:63]
 
     return index_name
 
@@ -46,7 +46,7 @@ async def create_forest_layer(
         # Create spatial index for this layer
         create_index_sql = text(f"""
             CREATE INDEX {index_name} 
-            ON area 
+            ON forest_area 
             USING GIST (geometry) 
             WHERE layer_id = '{layer.id}';
         """)

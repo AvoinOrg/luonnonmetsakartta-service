@@ -15,6 +15,7 @@ from app.db.forest_layer import (
     get_forest_layer_by_name,
     get_forest_layers_by_symbol,
     update_forest_layer,
+    get_index_name_for_id,
 )
 from app.db.connection_mock import monkeypatch_get_async_context_db, setup_and_teardown
 
@@ -179,12 +180,14 @@ async def test_spatial_index_creation(
             setattr(new_layer, key, value)
         created = await create_forest_layer(session, new_layer)
 
+        index_name = get_index_name_for_id(created.id)
+
         # Verify index exists
         result = await session.execute(
             text(
                 "SELECT EXISTS (SELECT 1 FROM pg_indexes WHERE indexname = :index_name)"
             ),
-            {"index_name": f"idx_area_geom_layer_{created.id}"},
+            {"index_name": index_name},
         )
         assert result.scalar() is True
 
