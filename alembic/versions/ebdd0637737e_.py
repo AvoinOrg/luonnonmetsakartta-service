@@ -30,7 +30,7 @@ def upgrade() -> None:
     sa.Column('description', postgresql.JSONB(astext_type=sa.Text()), nullable=True),
     sa.Column('pictures', postgresql.JSONB(astext_type=sa.Text()), nullable=True),
     sa.Column('municipality', sa.Text(), nullable=True),
-    sa.Column('geometry', Geometry('POLYGON', srid=4326, spatial_index=True), nullable=True),
+    sa.Column('geometry', Geometry('GEOMETRY', srid=3067, spatial_index=True), nullable=True),
     sa.Column('original_properties', postgresql.JSONB(astext_type=sa.Text()), nullable=True),
     sa.PrimaryKeyConstraint('id')
     )
