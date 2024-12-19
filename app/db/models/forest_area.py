@@ -1,7 +1,7 @@
 from datetime import datetime
 from uuid import uuid4
 
-from sqlalchemy import Text, text
+from sqlalchemy import Numeric, Text, text
 from sqlalchemy.dialects.postgresql import UUID, JSONB, TIMESTAMP
 from sqlalchemy.orm import Mapped, mapped_column
 from geoalchemy2 import Geometry
@@ -32,7 +32,10 @@ class ForestArea(Base):
     description: Mapped[Optional[str]] = mapped_column(JSONB, nullable=True)
     pictures: Mapped[Optional[list]] = mapped_column(JSONB, nullable=True)
     municipality: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    region: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    area_ha: Mapped[Optional[float]] = mapped_column(Numeric, nullable=True)
+    date: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     geometry: Mapped[Geometry] = mapped_column(
-        Geometry(geometry_type="POLYGON", srid=4326), nullable=True
-    ) # do multipolygons work?
+        Geometry(geometry_type="GEOMETRY", srid=3067), nullable=True
+    )  # do multipolygons work?
     original_properties: Mapped[Optional[dict]] = mapped_column(JSONB, nullable=True)
