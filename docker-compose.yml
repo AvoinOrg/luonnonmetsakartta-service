@@ -33,17 +33,17 @@ services:
     ports:
       - ${DEV_POSTGRES_OUT_PORT}:${DEV_POSTGRES_PORT}
     environment:
-        POSTGRES_USER: ${DEV_POSTGRES_USER}
-        POSTGRES_DB: ${DEV_POSTGRES_DB}
-        POSTGRES_PASSWORD: ${DEV_POSTGRES_PASSWORD}
-        POSTGRES_HOST: ${DEV_POSTGRES_HOST}
-        POSTGRES_PORT: ${DEV_POSTGRES_PORT}
+      POSTGRES_USER: ${DEV_POSTGRES_USER}
+      POSTGRES_DB: ${DEV_POSTGRES_DB}
+      POSTGRES_PASSWORD: ${DEV_POSTGRES_PASSWORD}
+      POSTGRES_HOST: ${DEV_POSTGRES_HOST}
+      POSTGRES_PORT: ${DEV_POSTGRES_PORT}
 
-        FORCE_SSL: FALSE
-      # - SSL_DIR=${CERT_DIR}
-      # - SSL_CERT_FILE=${CERT_DIR}/fullchain.pem
-      # - SSL_KEY_FILE=${CERT_DIR}/privkey.pem
-      # - SSL_CA_FILE=${CERT_DIR}/server.crt
+      FORCE_SSL: FALSE
+    # - SSL_DIR=${CERT_DIR}
+    # - SSL_CERT_FILE=${CERT_DIR}/fullchain.pem
+    # - SSL_KEY_FILE=${CERT_DIR}/privkey.pem
+    # - SSL_CA_FILE=${CERT_DIR}/server.crt
     restart: unless-stopped
     # healthcheck:
     #   test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB} -h localhost -p 5432"]
@@ -63,7 +63,7 @@ services:
       options:
         max-size: "10m"
         max-file: "3"
-      
+
   postgis-test:
     image: kartoza/postgis:${TEST_POSTGRES_VERSION}
     container_name: ${TEST_POSTGRES_HOST}
@@ -78,17 +78,17 @@ services:
     ports:
       - ${TEST_POSTGRES_OUT_PORT}:${TEST_POSTGRES_PORT}
     environment:
-        POSTGRES_USER: ${TEST_POSTGRES_USER}
-        POSTGRES_DB: ${TEST_POSTGRES_DB}
-        POSTGRES_PASSWORD: ${TEST_POSTGRES_PASSWORD}
-        POSTGRES_HOST: ${TEST_POSTGRES_HOST}
-        POSTGRES_PORT: ${TEST_POSTGRES_PORT}
+      POSTGRES_USER: ${TEST_POSTGRES_USER}
+      POSTGRES_DB: ${TEST_POSTGRES_DB}
+      POSTGRES_PASSWORD: ${TEST_POSTGRES_PASSWORD}
+      POSTGRES_HOST: ${TEST_POSTGRES_HOST}
+      POSTGRES_PORT: ${TEST_POSTGRES_PORT}
 
-        FORCE_SSL: FALSE
-      # - SSL_DIR=${CERT_DIR}
-      # - SSL_CERT_FILE=${CERT_DIR}/fullchain.pem
-      # - SSL_KEY_FILE=${CERT_DIR}/privkey.pem
-      # - SSL_CA_FILE=${CERT_DIR}/server.crt
+      FORCE_SSL: FALSE
+    # - SSL_DIR=${CERT_DIR}
+    # - SSL_CERT_FILE=${CERT_DIR}/fullchain.pem
+    # - SSL_KEY_FILE=${CERT_DIR}/privkey.pem
+    # - SSL_CA_FILE=${CERT_DIR}/server.crt
     restart: unless-stopped
     # healthcheck:
     #   test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB} -h localhost -p 5432"]
