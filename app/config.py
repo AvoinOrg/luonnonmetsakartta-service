@@ -44,6 +44,11 @@ class Settings(BaseSettings):
     """
 
     is_production: bool = str_to_bool(env_vars.get("IS_PRODUCTION", "False"))
+    geoserver_url: str = env_vars["GEOSERVER_URL"]
+    geoserver_workspace: str = env_vars["GEOSERVER_WORKSPACE"]
+    geoserver_store: str = env_vars["GEOSERVER_STORE"]
+    geoserver_user: str = env_vars["GEOSERVER_USER"]
+    geoserver_password: str = env_vars["GEOSERVER_PASSWORD"]
     pg_url: URL = get_pg_url(is_production)
 
 
