@@ -38,7 +38,7 @@ def forest_area_data(test_polygon):
         "description": {"details": "Test forest area description"},
         "pictures": [{"url": "test.jpg"}],
         "municipality": "Test City",
-        "geometry": from_shape(test_polygon, srid=4326),
+        "geometry": from_shape(test_polygon, srid=3067),
         "original_properties": {"key": "value"},
     }
 
@@ -59,7 +59,7 @@ async def created_forest_area(forest_area, monkeypatch_get_async_context_db):
 
 
 @pytest.mark.asyncio
-@pytest.mark.order(1)
+@pytest.mark.order(101)
 async def test_create_forest_area(forest_area, created_forest_area):
     assert created_forest_area.id is not None
     assert isinstance(created_forest_area.id, UUID)
@@ -67,7 +67,7 @@ async def test_create_forest_area(forest_area, created_forest_area):
 
 
 @pytest.mark.asyncio
-@pytest.mark.order(2)
+@pytest.mark.order(102)
 async def test_forest_area_values_match(forest_area_data, created_forest_area):
     assert created_forest_area.name == forest_area_data["name"]
     assert str(created_forest_area.layer_id) == forest_area_data["layer_id"]
@@ -83,7 +83,7 @@ async def test_forest_area_values_match(forest_area_data, created_forest_area):
 
 
 @pytest.mark.asyncio
-@pytest.mark.order(3)
+@pytest.mark.order(103)
 async def test_get_forest_area_by_id(
     created_forest_area, monkeypatch_get_async_context_db
 ):
@@ -94,7 +94,7 @@ async def test_get_forest_area_by_id(
 
 
 @pytest.mark.asyncio
-@pytest.mark.order(4)
+@pytest.mark.order(104)
 async def test_get_forest_area_by_name(
     created_forest_area, monkeypatch_get_async_context_db
 ):
@@ -105,7 +105,7 @@ async def test_get_forest_area_by_name(
 
 
 @pytest.mark.asyncio
-@pytest.mark.order(5)
+@pytest.mark.order(105)
 async def test_get_forest_areas_by_layer_id(
     created_forest_area, monkeypatch_get_async_context_db
 ):
@@ -118,7 +118,7 @@ async def test_get_forest_areas_by_layer_id(
 
 
 @pytest.mark.asyncio
-@pytest.mark.order(6)
+@pytest.mark.order(106)
 async def test_get_forest_areas_by_municipality(
     created_forest_area, monkeypatch_get_async_context_db
 ):
@@ -131,7 +131,7 @@ async def test_get_forest_areas_by_municipality(
 
 
 @pytest.mark.asyncio
-@pytest.mark.order(7)
+@pytest.mark.order(107)
 async def test_get_all_forest_areas(
     created_forest_area, monkeypatch_get_async_context_db
 ):
@@ -142,7 +142,7 @@ async def test_get_all_forest_areas(
 
 
 @pytest.mark.asyncio
-@pytest.mark.order(8)
+@pytest.mark.order(108)
 async def test_update_forest_area(
     created_forest_area, monkeypatch_get_async_context_db
 ):
@@ -161,7 +161,7 @@ async def test_update_forest_area(
 
 
 @pytest.mark.asyncio
-@pytest.mark.order(9)
+@pytest.mark.order(109)
 async def test_delete_forest_area(
     created_forest_area, monkeypatch_get_async_context_db
 ):
@@ -173,7 +173,7 @@ async def test_delete_forest_area(
 
 
 @pytest.mark.asyncio
-@pytest.mark.order(10)
+@pytest.mark.order(110)
 async def test_delete_forest_area_by_id(
     forest_area_data, monkeypatch_get_async_context_db
 ):

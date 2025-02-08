@@ -19,7 +19,7 @@ from app.db.forest_layer import (
 )
 from app.db.connection_mock import monkeypatch_get_async_context_db, setup_and_teardown
 
-pytestmark = pytest.mark.order(1)
+pytestmark = pytest.mark.order(201)
 
 
 @pytest.fixture(scope="session")
@@ -49,7 +49,7 @@ async def created_forest_layer(forest_layer, monkeypatch_get_async_context_db):
 
 
 @pytest.mark.asyncio
-@pytest.mark.order(1)
+@pytest.mark.order(201)
 async def test_create_forest_layer(
     forest_layer, created_forest_layer, monkeypatch_get_async_context_db
 ):
@@ -59,7 +59,7 @@ async def test_create_forest_layer(
 
 
 @pytest.mark.asyncio
-@pytest.mark.order(2)
+@pytest.mark.order(202)
 async def test_forest_layer_values_match(forest_layer_data, created_forest_layer):
     assert created_forest_layer.name == forest_layer_data["name"]
     assert created_forest_layer.color_code == forest_layer_data["color_code"]
@@ -72,7 +72,7 @@ async def test_forest_layer_values_match(forest_layer_data, created_forest_layer
 
 
 @pytest.mark.asyncio
-@pytest.mark.order(3)
+@pytest.mark.order(203)
 async def test_get_forest_layer_by_id(
     created_forest_layer, monkeypatch_get_async_context_db
 ):
@@ -85,7 +85,7 @@ async def test_get_forest_layer_by_id(
 
 
 @pytest.mark.asyncio
-@pytest.mark.order(4)
+@pytest.mark.order(204)
 async def test_get_forest_layer_by_name(
     created_forest_layer, monkeypatch_get_async_context_db
 ):
@@ -98,7 +98,7 @@ async def test_get_forest_layer_by_name(
 
 
 @pytest.mark.asyncio
-@pytest.mark.order(5)
+@pytest.mark.order(205)
 async def test_get_forest_layers_by_symbol(
     created_forest_layer, monkeypatch_get_async_context_db
 ):
@@ -109,7 +109,7 @@ async def test_get_forest_layers_by_symbol(
 
 
 @pytest.mark.asyncio
-@pytest.mark.order(6)
+@pytest.mark.order(206)
 async def test_get_all_forest_layers(
     created_forest_layer, monkeypatch_get_async_context_db
 ):
@@ -120,7 +120,7 @@ async def test_get_all_forest_layers(
 
 
 @pytest.mark.asyncio
-@pytest.mark.order(7)
+@pytest.mark.order(207)
 async def test_update_forest_layer(
     created_forest_layer, monkeypatch_get_async_context_db
 ):
@@ -139,7 +139,7 @@ async def test_update_forest_layer(
 
 
 @pytest.mark.asyncio
-@pytest.mark.order(8)
+@pytest.mark.order(208)
 async def test_delete_forest_layer(
     created_forest_layer, monkeypatch_get_async_context_db
 ):
@@ -152,7 +152,7 @@ async def test_delete_forest_layer(
 
 
 @pytest.mark.asyncio
-@pytest.mark.order(9)
+@pytest.mark.order(209)
 async def test_delete_forest_layer_by_id(
     forest_layer_data, monkeypatch_get_async_context_db
 ):
@@ -170,7 +170,7 @@ async def test_delete_forest_layer_by_id(
 
 
 @pytest.mark.asyncio
-@pytest.mark.order(10)
+@pytest.mark.order(210)
 async def test_spatial_index_creation(
     forest_layer_data, monkeypatch_get_async_context_db
 ):
