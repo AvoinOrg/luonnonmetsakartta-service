@@ -14,7 +14,10 @@ services:
       - ./.cache:/root/.cache
       # - ./.conda-pkgs:/root/conda/pkgs
       - ./.vscode-server:/root/.vscode-server
-      - ${GIT_SSH_KEY}:/root/.ssh/id_rsa:z
+      - python-dev:/root/dev
+      - type: bind
+        source: $HOST_SSH_AUTH_SOCK # e.g. /home/<youruser>/.ssh/agent.sock
+        target: /ssh-agent
     entrypoint: [ "/bin/bash", "/app/docker-entrypoint.sh" ]
     networks:
       - luonnonmetsakartta-net
@@ -108,6 +111,10 @@ services:
       options:
         max-size: "10m"
         max-file: "3"
+
+volumes:
+  python-dev:
+    driver: local
 
 networks:
   luonnonmetsakartta-net:
