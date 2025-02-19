@@ -17,7 +17,7 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db import connection
-from app.db.models.base import Base 
+from app.db.models.base import Base
 from app.utils.logger import get_logger
 from app.types.general import used_db_types
 
@@ -30,7 +30,6 @@ TEST_POSTGRES_PORT = os.getenv("TEST_POSTGRES_PORT", "5432")
 TEST_POSTGRES_DB = os.getenv("TEST_POSTGRES_DB", "test-postgres-test")
 
 TEST_DATABASE_URL = f"postgresql+asyncpg://{TEST_POSTGRES_USER}:{TEST_POSTGRES_PASSWORD}@{TEST_POSTGRES_HOST}:{TEST_POSTGRES_PORT}/{TEST_POSTGRES_DB}"
-
 
 # @pytest.fixture(scope="session")
 # def event_loop():
@@ -119,7 +118,7 @@ async def async_setup():
         alembic_cfg.set_main_option("is_testing", "True")
         await session.begin()
         # await drop_all_tables_and_types(session)
-        command.downgrade(alembic_cfg, 'base')
+        command.downgrade(alembic_cfg, "base")
         await session.commit()
 
         # Run Alembic migrations to create tables
@@ -133,7 +132,7 @@ async def async_teardown():
         alembic_cfg = Config("alembic.ini")
         alembic_cfg.set_main_option("is_testing", "True")
         # Downgrade to the base revision
-        command.downgrade(alembic_cfg, 'base')
+        command.downgrade(alembic_cfg, "base")
         await session.commit()
 
 
@@ -151,7 +150,7 @@ def setup_and_teardown(request):
 #     # Dynamically import all model modules and collect model classes
 #     model_classes = []
 #     models_package = importlib.import_module('app.db.models')
-    
+
 #     for _, name, _ in pkgutil.iter_modules(models_package.__path__):
 #         if name != 'base':  # Skip base.py
 #             module = importlib.import_module(f'app.db.models.{name}')
@@ -162,13 +161,13 @@ def setup_and_teardown(request):
 
 #     # Get table names from model classes
 #     table_names = [model.__tablename__ for model in model_classes]
-    
+
 #     # Drop tables one by one
 #     for table in table_names:
 #         await conn.execute(text(f"DROP TABLE IF EXISTS {table} CASCADE"))
-    
+
 #     # Drop custom types
 #     for db_type in used_db_types:
 #         await conn.execute(text(f"DROP TYPE IF EXISTS {db_type} CASCADE"))
-    
+
 #     await conn.commit()
