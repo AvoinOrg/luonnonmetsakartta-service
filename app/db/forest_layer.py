@@ -16,10 +16,11 @@ def get_index_name_for_id(id: str) -> str:
         layer_uuid = uuid.UUID(id)
 
     index_suffix = layer_uuid.hex
-    
+
     index_name = f"idx_forest_area_geom_layer_{index_suffix}"[:63]
 
     return index_name
+
 
 async def get_forest_layer_by_id(
     db_session: AsyncSession, id: str
