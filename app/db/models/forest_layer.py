@@ -1,5 +1,5 @@
 from datetime import datetime
-from sqlalchemy import Text, text
+from sqlalchemy import Boolean, Text, text
 from sqlalchemy.dialects.postgresql import UUID, JSONB, TIMESTAMP
 from sqlalchemy.orm import Mapped, mapped_column
 from uuid import uuid4
@@ -17,6 +17,7 @@ class ForestLayer(Base):
         default=uuid4,
         server_default=text("gen_random_uuid()"),
     )
+    # shapefile_id_col: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     created_ts: Mapped[datetime] = mapped_column(
         TIMESTAMP,
         server_default=text("current_timestamp(0)"),
@@ -25,6 +26,7 @@ class ForestLayer(Base):
         TIMESTAMP,
         server_default=text("current_timestamp(0)"),
     )
+    is_hidden: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     name: Mapped[str] = mapped_column(Text, nullable=False)
     color_code: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     symbol: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
