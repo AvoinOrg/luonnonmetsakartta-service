@@ -1,7 +1,9 @@
 from typing import Optional
+from sqlalchemy.sql import text
 import httpx
 from uuid import UUID
 from app.config import get_settings
+from app.db import connection
 
 global_settings = get_settings()
 
@@ -13,13 +15,13 @@ password = global_settings.geoserver_password
 
 
 async def create_geoserver_layer(
-    forest_layer_id: UUID,
+    forest_layer_id: str,
     forest_layer_name: str,
 ) -> bool:
     """Create GeoServer layer for forest areas with given layer_id."""
 
     # SQL view parameters
-    view_name = f"forest_areas_{forest_layer_id.hex}"
+    view_name = f"forest_areas_{forest_layer_id}"
     sql_view = f"""
     SELECT 
         id,
@@ -80,14 +82,15 @@ async def create_geoserver_layer(
             raise Exception(f"Failed to create layer: {response.text}")
 
 
-async def delete_geoserver_layer(forest_layer_id: UUID) -> bool:
+async def delete_geoserver_layer(forest_layer_id: str) -> bool:
     """
     Call GeoServer's REST endpoint to remove the corresponding feature type and its associated resources.
 
     This function issues a DELETE request to:
       /rest/workspaces/{workspace}/datastores/{store}/featuretypes/{layer}
     """
-    view_name = f"forest_areas_{forest_layer_id.hex}"
+    view_name = f"forest_areas_{forest_layer_id}"
+    print(view_name)
     delete_url = f"{geoserver_url}/rest/workspaces/{geoserver_workspace}/datastores/{geoserver_store}/featuretypes/{view_name}?recurse=true"
     async with httpx.AsyncClient() as client:
         resp = await client.delete(
@@ -96,6 +99,12 @@ async def delete_geoserver_layer(forest_layer_id: UUID) -> bool:
             headers={"Content-Type": "application/json"},
         )
         if resp.status_code == 200:
+            async with connection.get_async_context_db() as session:
+                await session.execute(
+                    text(f'DROP TABLE IF EXISTS "{view_name}" CASCADE')
+                )
+                await session.commit()
+
             return True
         else:
             raise Exception(f"Failed to delete layer: {resp.text}")
