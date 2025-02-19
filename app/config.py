@@ -39,6 +39,9 @@ class Settings(BaseSettings):
     BaseSettings, from Pydantic, validates the data so that when we create an instance of Settings,
      environment and testing will have types of str and bool, respectively.
     Parameters:
+    zitadel_client_id: (str):
+    zitadel_client_secret: (str):
+    zitadel_domain: (str):
     Returns:
     instance of Settings
     """
@@ -50,6 +53,9 @@ class Settings(BaseSettings):
     geoserver_user: str = env_vars["GEOSERVER_USER"]
     geoserver_password: str = env_vars["GEOSERVER_PASSWORD"]
     pg_url: URL = get_pg_url(is_production)
+    zitadel_domain: str = os.getenv("ZITADEL_DOMAIN") or ""
+    zitadel_client_id: str = os.getenv("ZITADEL_CLIENT_ID") or ""
+    zitadel_client_secret: str = os.getenv("ZITADEL_CLIENT_SECRET") or ""
 
 
 @lru_cache
