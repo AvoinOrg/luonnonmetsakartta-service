@@ -8,7 +8,7 @@ from app.db import connection
 from app.db.models.forest_layer import ForestLayer
 from app.db.models.forest_area import ForestArea
 from app.api.geoserver import create_geoserver_layer, delete_geoserver_layer
-from app.db.connection_mock import monkeypatch_get_async_context_db
+from app.db.prod_connection_mock import prod_monkeypatch_get_async_context_db
 from app.config import get_settings
 
 settings = get_settings()
@@ -68,17 +68,18 @@ async def test_create_geoserver_layer():
 
     # Verify layer exists in GeoServer
     async with httpx.AsyncClient() as client:
-        url = f"{GEOSERVER_URL}/rest/workspaces/{GEOSERVER_WORKSPACE}/layers/forest_areas_{TEST_LAYER_ID.hex}.json"
+        url = f"{GEOSERVER_URL}/rest/workspaces/{GEOSERVER_WORKSPACE}/layers/forest_areas_{TEST_LAYER_ID}.json"
         print(url)
         response = await client.get(
-            f"{GEOSERVER_URL}/rest/workspaces/{GEOSERVER_WORKSPACE}/layers/forest_areas_{TEST_LAYER_ID.hex}.json",
+            f"{GEOSERVER_URL}/rest/workspaces/{GEOSERVER_WORKSPACE}/layers/forest_areas_{TEST_LAYER_ID}.json",
             auth=(GEOSERVER_USER, GEOSERVER_PASSWORD),
         )
         assert response.status_code == 200
 
+
 @pytest.mark.order(after="test_create_geoserver_layer")
 @pytest.mark.asyncio
-async def test_delete_geoserver_layer():
+async def test_delete_geoserver_layer(prod_monkeypatch_get_async_context_db):
     """
     Test deleting the same GeoServer layer created in test_create_geoserver_layer.
     Then verify that GeoServer returns 404 or similar error message
@@ -90,7 +91,7 @@ async def test_delete_geoserver_layer():
 
     # 2) Verify deletion
     async with httpx.AsyncClient() as client:
-        layer_url = f"{GEOSERVER_URL}/rest/workspaces/{GEOSERVER_WORKSPACE}/layers/forest_areas_{TEST_LAYER_ID.hex}.json"
+        layer_url = f"{GEOSERVER_URL}/rest/workspaces/{GEOSERVER_WORKSPACE}/layers/forest_areas_{TEST_LAYER_ID}.json"
         response = await client.get(
             layer_url, auth=(GEOSERVER_USER, GEOSERVER_PASSWORD)
         )
