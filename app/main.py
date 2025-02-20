@@ -79,3 +79,40 @@ async def import_shapefile(
         raise HTTPException(
             status_code=400, detail=f"Failed to import shapefile: {str(e)}"
         )
+
+
+@app.delete(path="/layer/{layer_id}")
+async def delete_layer(layer_id: str):
+    """
+    Delete a forest layer and its associated GeoServer layer.
+    Returns 404 if layer not found, 500 if deletion fails.
+    """
+    try:
+        async with connection.get_async_context_db() as session:
+            # First check if layer exists
+            layer = await get_forest_layer_by_id(session, str(layer_id))
+            if not layer:
+                raise HTTPException(
+                    status_code=404, detail=f"Layer with id {layer_id} not found"
+                )
+
+            # Try to delete from both GeoServer and database
+            try:
+                await delete_geoserver_layer(layer_id)
+            except Exception as e:
+                logger.error(f"Failed to delete GeoServer layer: {e}")
+                # Continue with database deletion even if GeoServer fails
+
+            # Delete from database
+            result = await delete_forest_layer_by_id(session, str(layer_id))
+            if not result:
+                raise HTTPException(status_code=500, detail="Database deletion failed")
+
+            return {"message": f"Layer {layer_id} deleted successfully"}
+
+    except HTTPException as he:
+        raise he
+    except Exception as e:
+        logger.error(f"Error deleting layer {layer_id}: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to delete layer: {str(e)}")
+
