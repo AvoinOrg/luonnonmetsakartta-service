@@ -7,7 +7,13 @@ import httpx
 from app.db import connection
 from app.db.models.forest_layer import ForestLayer
 from app.db.models.forest_area import ForestArea
-from app.api.geoserver import create_geoserver_layer, delete_geoserver_layer
+from app.api.geoserver import (
+    create_geoserver_layer,
+    delete_geoserver_layer,
+    get_layer_name_for_id,
+    get_layer_permissions,
+    set_layer_visibility,
+)
 from app.db.prod_connection_mock import prod_monkeypatch_get_async_context_db
 from app.config import get_settings
 
@@ -20,6 +26,8 @@ GEOSERVER_USER = settings.geoserver_user
 GEOSERVER_PASSWORD = settings.geoserver_password
 
 TEST_LAYER_ID = UUID("00000000-0000-0000-0000-000000000999")
+
+test_suite_order = 2000
 
 # @pytest.fixture(scope="session")
 # async def test_layer_with_areas(monkeypatch_get_async_context_db):
@@ -57,7 +65,7 @@ TEST_LAYER_ID = UUID("00000000-0000-0000-0000-000000000999")
 #         await session.commit()
 
 
-@pytest.mark.order(1)
+@pytest.mark.order(test_suite_order)
 @pytest.mark.asyncio
 async def test_create_geoserver_layer():
     result = await create_geoserver_layer(
@@ -78,6 +86,42 @@ async def test_create_geoserver_layer():
 
 
 @pytest.mark.order(after="test_create_geoserver_layer")
+@pytest.mark.asyncio
+async def test_get_layer_permissions():
+    layer_name = get_layer_name_for_id(TEST_LAYER_ID)
+    permissions = await get_layer_permissions(TEST_LAYER_ID)
+
+    # Check for a read rule "<workspace>.<layer>.r"
+    read_rule_key = f"{GEOSERVER_WORKSPACE}.{layer_name}.r"
+    assert read_rule_key in permissions, f"Expected read rule {read_rule_key}"
+
+    # Assert unwanted roles are not present
+    read_rule_roles = permissions[read_rule_key]
+    assert "ROLE_ANONYMOUS" not in read_rule_roles
+    assert "ROLE_AUTHENTICATED" not in read_rule_roles
+
+
+@pytest.mark.order(after="test_get_layer_permissions")
+@pytest.mark.asyncio
+async def test_set_layer_visibility():
+    result = await set_layer_visibility(TEST_LAYER_ID, is_hidden=False)
+
+    assert result is True
+
+    layer_name = get_layer_name_for_id(TEST_LAYER_ID)
+    permissions = await get_layer_permissions(TEST_LAYER_ID)
+
+    # Check for a read rule "<workspace>.<layer>.r"
+    read_rule_key = f"{GEOSERVER_WORKSPACE}.{layer_name}.r"
+    assert read_rule_key in permissions, f"Expected read rule {read_rule_key}"
+
+    # Assert unwanted roles are not present
+    read_rule_roles = permissions[read_rule_key]
+    assert "ROLE_ANONYMOUS" in read_rule_roles
+    assert "ROLE_AUTHENTICATED" in read_rule_roles
+
+
+@pytest.mark.order(after="test_set_layer_visibility")
 @pytest.mark.asyncio
 async def test_delete_geoserver_layer(prod_monkeypatch_get_async_context_db):
     """
