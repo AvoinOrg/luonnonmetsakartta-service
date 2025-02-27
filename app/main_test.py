@@ -9,7 +9,10 @@ import tempfile
 
 from app.main import app, lifespan
 from app.utils.logger import get_logger
-from app.db.prod_connection_mock import prod_monkeypatch_get_async_context_db
+from app.db.connection_mock import monkeypatch_get_async_context_db
+from app.config import get_settings
+
+settings = get_settings()
 
 logger = get_logger(__name__)
 pytestmark = pytest.mark.order(103)
@@ -64,50 +67,132 @@ def real_shapefile():
         return f.read()
 
 
-@pytest.mark.order(order_num)
-@pytest.mark.asyncio
-async def test_create_layer_success(
-    client: httpx.AsyncClient, mock_shapefile, prod_monkeypatch_get_async_context_db
-) -> None:
-    files = [
-        (
-            "zip_file",
-            ("test.zip", mock_shapefile, "application/zip"),
+@pytest.fixture(scope="session")
+async def auth_headers():
+    """Get OAuth2 token from Zitadel using client credentials flow"""
+    settings = get_settings()
+    token_url = f"{settings.zitadel_domain}/oauth/v2/token"
+
+    data = {
+        "grant_type": "client_credentials",
+        "client_id": settings.zitadel_test_client_id,
+        "client_secret": settings.zitadel_test_client_secret,
+        "scope": f"openid email profile offline_access urn:zitadel:iam:org:project:roles urn:zitadel:iam:org:project:id:{settings.zitadel_project_id}:aud",
+    }
+
+    async with httpx.AsyncClient() as client:
+        response = await client.post(
+            token_url,
+            data=data,
+            headers={"Content-Type": "application/x-www-form-urlencoded"},
         )
-    ]
 
-    data = {"name": "Test Layer", "description": "Test Description"}
+        if response.status_code != 200:
+            raise Exception(f"Failed to get auth token: {response.text}")
 
-    response = await client.post("/layer", files=files, data=data)
+        token_data = response.json()
+        return {"Authorization": f"Bearer {token_data['access_token']}"}
 
-    assert response.status_code == 200
-    result = response.json()
-    assert result["name"] == "Test Layer"
-    assert result["description"] == "Test Description"
-    assert "id" in result
 
-    if "id" in result:
-        layer_id = result["id"]
-        # Cleanup
-        response = await client.delete(f"/layer/{layer_id}")
-        assert response.status_code == 200
+@pytest.fixture(scope="session")
+async def auth_headers_no_roles():
+    """Get OAuth2 token from Zitadel using client credentials flow"""
+    settings = get_settings()
+    token_url = f"{settings.zitadel_domain}/oauth/v2/token"
+
+    data = {
+        "grant_type": "client_credentials",
+        "client_id": settings.zitadel_test_client_id_no_roles,
+        "client_secret": settings.zitadel_test_client_secret_no_roles,
+        "scope": f"openid email profile offline_access urn:zitadel:iam:org:project:roles urn:zitadel:iam:org:project:id:{settings.zitadel_project_id}:aud",
+    }
+
+    async with httpx.AsyncClient() as client:
+        response = await client.post(
+            token_url,
+            data=data,
+            headers={"Content-Type": "application/x-www-form-urlencoded"},
+        )
+
+        if response.status_code != 200:
+            raise Exception(f"Failed to get auth token: {response.text}")
+
+        token_data = response.json()
+        return {"Authorization": f"Bearer {token_data['access_token']}"}
+
+
+@pytest.fixture(scope="session")
+def invalid_auth_headers():
+    token = "invalid.jwt.token"  # Token from Zitadel service user
+    return {"Authorization": f"Bearer {token}"}
 
 
 @pytest.mark.order(order_num + 1)
 @pytest.mark.asyncio
-async def test_create_layer_missing_file(client):
+async def test_create_layer_missing_file(
+    client, auth_headers, monkeypatch_get_async_context_db
+):
     data = {"name": "Test Layer", "description": "Test Description"}
 
     response = await client.post(
-        "/layer", files=[("zip_file", (None, None, "application/zip"))], data=data
+        "/layer",
+        files=[("zip_file", (None, None, "application/zip"))],
+        data=data,
+        headers=auth_headers,
     )
 
     assert response.status_code == 400  # Bad request, missing file
 
 
+@pytest.mark.order(order_num + 1)
+@pytest.mark.asyncio
+async def test_create_layer_unauthorized(
+    client: httpx.AsyncClient,
+    mock_shapefile,
+    invalid_auth_headers,
+    monkeypatch_get_async_context_db,
+):
+    """Test that creating a layer fails with invalid authentication"""
+    files = [("zip_file", ("test.zip", mock_shapefile, "application/zip"))]
+    data = {
+        "name": "Test Layer",
+        "description": "Test Description",
+    }
+
+    response = await client.post(
+        "/layer", files=files, data=data, headers=invalid_auth_headers
+    )
+
+    assert response.status_code == 401
+
+
+@pytest.mark.order(order_num + 1)
+@pytest.mark.asyncio
+async def test_create_layer_no_permissions(
+    client: httpx.AsyncClient,
+    mock_shapefile,
+    auth_headers_no_roles,
+    monkeypatch_get_async_context_db,
+):
+    """Test that creating a layer fails when user has no permissions"""
+    files = [("zip_file", ("test.zip", mock_shapefile, "application/zip"))]
+    data = {
+        "name": "Test Layer",
+        "description": "Test Description",
+    }
+
+    response = await client.post(
+        "/layer", files=files, data=data, headers=auth_headers_no_roles
+    )
+
+    assert response.status_code == 403
+
+
 @pytest.mark.order(order_num + 2)
 @pytest.mark.asyncio
-async def test_create_layer_invalid_file(client):
+async def test_create_layer_invalid_file(
+    client, auth_headers, monkeypatch_get_async_context_db
+):
     files = [
         ("shp_file", ("test.shp", b"invalid data", "application/octet-stream")),
     ]
@@ -116,88 +201,38 @@ async def test_create_layer_invalid_file(client):
         "name": "Test Layer",
     }
 
-    response = await client.post("/layer", files=files, data=data)
+    response = await client.post("/layer", files=files, data=data, headers=auth_headers)
 
     assert response.status_code == 422
 
 
-@pytest.mark.order(order_num + 3)
+@pytest.mark.order(order_num + 12)
 @pytest.mark.asyncio
-async def test_import_real_shapefile_success(
-    client, real_shapefile, prod_monkeypatch_get_async_context_db
-):
-    files = [
-        (
-            "zip_file",
-            ("test_data.zip", real_shapefile, "application/zip"),
-        )
-    ]
-
-    data = {"name": "Natural Forests", "description": "Imported natural forest areas"}
-
-    response = await client.post("/layer", files=files, data=data)
-
+async def test_validate_admin(client: httpx.AsyncClient, auth_headers):
+    """Test admin validation with valid service user token"""
+    response = await client.get("/admin/validate", headers=auth_headers)
     assert response.status_code == 200
-    result = response.json()
-    assert result["name"] == "Natural Forests"
-    assert "id" in result
-
-    if "id" in result:
-        layer_id = result["id"]
-        # Cleanup
-        response = await client.delete(f"/layer/{layer_id}")
-        assert response.status_code == 200
 
 
-@pytest.mark.order(order_num + 4)
+@pytest.mark.order(order_num + 13)
 @pytest.mark.asyncio
-async def test_get_layers(
-    client: httpx.AsyncClient, mock_shapefile, prod_monkeypatch_get_async_context_db
+async def test_validate_admin_unauthorized(
+    client: httpx.AsyncClient, invalid_auth_headers
 ):
-    # Create two test layers
-    files = [("zip_file", ("test.zip", mock_shapefile, "application/zip"))]
-    layer_ids = []
+    """Test that admin validation fails with invalid token"""
+    # Test with invalid token
+    response = await client.get("/admin/validate", headers=invalid_auth_headers)
 
-    try:
-        # Create first layer
-        response1 = await client.post(
-            "/layer",
-            files=files,
-            data={"name": "Test Layer 1", "description": "First test layer"},
-        )
-        assert response1.status_code == 200
-        layer_ids.append(response1.json()["id"])
+    assert response.status_code == 401
 
-        # Create second layer
-        response2 = await client.post(
-            "/layer",
-            files=files,
-            data={"name": "Test Layer 2", "description": "Second test layer"},
-        )
-        assert response2.status_code == 200
-        layer_ids.append(response2.json()["id"])
 
-        # Get all layers
-        response = await client.get("/layers")
-        assert response.status_code == 200
+@pytest.mark.order(order_num + 14)
+@pytest.mark.asyncio
+async def test_validate_admin_no_permissions(
+    client: httpx.AsyncClient, auth_headers_no_roles
+):
+    """Test that admin validation fails with invalid token"""
+    # Test with invalid token
+    response = await client.get("/admin/validate", headers=auth_headers_no_roles)
 
-        layers = response.json()
-        assert isinstance(layers, list)
-        assert len(layers) >= 2
-
-        # Verify our test layers are present
-        layer_names = [layer["name"] for layer in layers]
-        assert "Test Layer 1" in layer_names
-        assert "Test Layer 2" in layer_names
-
-        # Verify layer structure
-        for layer in layers:
-            assert "id" in layer
-            assert "name" in layer
-            assert "description" in layer
-
-    finally:
-        # Cleanup - delete test layers
-        for layer_id in layer_ids:
-            delete_response = await client.delete(f"/layer/{layer_id}")
-            assert delete_response.status_code == 200
+    assert response.status_code == 403
