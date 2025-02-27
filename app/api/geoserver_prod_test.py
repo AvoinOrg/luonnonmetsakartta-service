@@ -1,3 +1,7 @@
+# Tests that require a running GeoServer instance
+# They use the POSTGRES_ and GEOSERVER_ env variables, instead of the TEST_POSTGRES_ variables
+# Don't actually run these tests against production server, but a sandbox instance.
+
 import pytest
 from uuid import UUID
 from shapely.geometry import Polygon
