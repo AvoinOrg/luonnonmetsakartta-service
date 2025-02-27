@@ -12,6 +12,7 @@ from app.db.forest_area import (
     create_forest_area,
     delete_forest_area,
     delete_forest_area_by_id,
+    delete_forest_area_by_layer_id,
     get_forest_area_by_id,
     get_all_forest_areas,
     get_forest_area_by_name,
@@ -184,6 +185,23 @@ async def test_delete_forest_area_by_id(
         created = await create_forest_area(session, new_area)
 
         result = await delete_forest_area_by_id(session, str(created.id))
+        assert result is True
+        fetched = await get_forest_area_by_id(session, str(created.id))
+        assert fetched is None
+
+
+@pytest.mark.asyncio
+@pytest.mark.order(110)
+async def test_delete_forest_area_by_layer_id(
+    forest_area_data, monkeypatch_get_async_context_db
+):
+    async with connection.get_async_context_db() as session:
+        new_area = ForestArea()
+        for key, value in forest_area_data.items():
+            setattr(new_area, key, value)
+        created = await create_forest_area(session, new_area)
+
+        result = await delete_forest_area_by_layer_id(session, str(created.layer_id))
         assert result is True
         fetched = await get_forest_area_by_id(session, str(created.id))
         assert fetched is None
