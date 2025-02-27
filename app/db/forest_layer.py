@@ -7,6 +7,7 @@ from sqlalchemy import UUID, delete
 from sqlalchemy import text
 from sqlalchemy.exc import SQLAlchemyError
 
+from app.db.forest_area import delete_forest_area_by_layer_id
 from app.db.models.forest_layer import ForestLayer
 
 
@@ -98,6 +99,8 @@ async def delete_forest_layer_by_id(db_session: AsyncSession, id: str) -> bool:
         return False
 
     try:
+        await delete_forest_area_by_layer_id(db_session, id)
+
         index_name = get_index_name_for_id(id)
         # Drop the spatial index for this layer
         drop_index_sql = text(f"""
