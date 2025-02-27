@@ -56,6 +56,17 @@ class Settings(BaseSettings):
     zitadel_domain: str = os.getenv("ZITADEL_DOMAIN") or ""
     zitadel_client_id: str = os.getenv("ZITADEL_CLIENT_ID") or ""
     zitadel_client_secret: str = os.getenv("ZITADEL_CLIENT_SECRET") or ""
+    zitadel_test_client_id: str = os.getenv("ZITADEL_TEST_CLIENT_ID") or ""
+    zitadel_test_client_secret: str = os.getenv("ZITADEL_TEST_CLIENT_SECRET") or ""
+    zitadel_test_client_id_no_roles: str = (
+        os.getenv("ZITADEL_TEST_CLIENT_ID_NO_ROLES") or ""
+    )
+    zitadel_test_client_secret_no_roles: str = (
+        os.getenv("ZITADEL_TEST_CLIENT_SECRET_NO_ROLES") or ""
+    )
+    zitadel_project_id: str = os.getenv("ZITADEL_PROJECT_ID") or ""
+    zitadel_project_editor_role: str = os.getenv("ZITADEL_PROJECT_EDITOR_ROLE") or ""
+    zitadel_project_admin_role: str = os.getenv("ZITADEL_PROJECT_ADMIN_ROLE") or ""
 
 
 @lru_cache
