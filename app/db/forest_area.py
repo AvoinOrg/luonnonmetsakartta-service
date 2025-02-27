@@ -77,6 +77,21 @@ async def delete_forest_area_by_id(db_session: AsyncSession, id: str) -> bool:
         return False
 
 
+async def delete_forest_area_by_layer_id(
+    db_session: AsyncSession, layer_id: str
+) -> bool:
+    if not id:
+        return False
+
+    try:
+        await db_session.execute(delete(ForestArea).filter_by(layer_id=layer_id))
+        await db_session.commit()
+        return True
+    except SQLAlchemyError:
+        await db_session.rollback()
+        return False
+
+
 async def get_forest_area_by_name(
     db_session: AsyncSession, name: str
 ) -> Optional[ForestArea]:
