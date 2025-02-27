@@ -138,7 +138,7 @@ async def import_shapefile_to_layer(
     zip_path: str,
     layer_name: str,
     description: str | None = None,
-    hidden: bool = False,
+    is_hidden: bool = True,
 ) -> ForestLayer:
     """
     Import shapefile geometries into a new ForestLayer and ForestAreas.
@@ -159,6 +159,7 @@ async def import_shapefile_to_layer(
         layer = ForestLayer(
             name=layer_name,
             description=description,
+            is_hidden=is_hidden,
             original_properties={
                 "crs": str(object=gdf.crs),
                 "columns": list(gdf.columns),
