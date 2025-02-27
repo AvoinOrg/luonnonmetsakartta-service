@@ -137,7 +137,7 @@ async def get_layer_permissions(layer_id: str | UUID) -> dict:
 
 
 async def set_layer_visibility(
-    layer_id: str, is_hidden: bool, is_initial_rule: bool = False
+    layer_id: str | UUID, is_hidden: bool, is_initial_rule: bool = False
 ) -> bool:
     """
     Modify visibility permissions for a GeoServer layer by appending to existing rules,
