@@ -1,5 +1,6 @@
 services:
-  app:
+  app-dev:
+    profiles: [ dev ]
     container_name: luonnonmetsakartta-service
     build: .
     env_file:
@@ -24,6 +25,7 @@ services:
       - luonnonmetsakartta-net
 
   postgis-dev:
+    profiles: [ dev ]
     image: kartoza/postgis:${DEV_POSTGRES_VERSION}
     container_name: ${DEV_POSTGRES_HOST}
     hostname: ${DEV_POSTGRES_HOST}
@@ -69,6 +71,7 @@ services:
         max-file: "3"
 
   postgis-test:
+    profiles: [ dev ]
     image: kartoza/postgis:${TEST_POSTGRES_VERSION}
     container_name: ${TEST_POSTGRES_HOST}
     hostname: ${TEST_POSTGRES_HOST}
