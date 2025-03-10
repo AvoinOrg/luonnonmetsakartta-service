@@ -32,7 +32,15 @@ from app.api.geoserver import (
 logger = get_logger(__name__)
 global_settings = config.get_settings()
 
-app = FastAPI()
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    print("starting up")
+    yield
+    print("shutting down")
+
+
+app = FastAPI(lifespan=lifespan)
 
 origins = [
     "*",
@@ -45,16 +53,6 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
-
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    print("starting up")
-    yield
-    print("shutting down")
-
-
-app = FastAPI(lifespan=lifespan)
 
 
 class LayerResponsePublic(BaseModel):
