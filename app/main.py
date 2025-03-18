@@ -59,13 +59,12 @@ class LayerResponsePublic(BaseModel):
     id: str
     name: str
     description: str | None = None
+    created_ts: int | None = None
+    updated_ts: int | None = None
 
 
-class LayerResponse(BaseModel):
-    id: str
-    name: str
+class LayerResponse(LayerResponsePublic):
     is_hidden: bool
-    description: str | None = None
 
 
 @app.post(path="/layer")
@@ -104,6 +103,8 @@ async def create_layer(
                     name=layer.name,
                     description=layer.description,
                     is_hidden=layer.is_hidden,
+                    created_ts=int(layer.created_ts.timestamp() * 1000),
+                    updated_ts=int(layer.updated_ts.timestamp() * 1000),
                 )
 
     except Exception as e:
@@ -177,12 +178,16 @@ async def get_layer(layer_id, editor_status=Depends(get_editor_status_optional))
                     name=layer.name,
                     description=layer.description,
                     is_hidden=layer.is_hidden,
+                    created_ts=int(layer.created_ts.timestamp() * 1000),
+                    updated_ts=int(layer.updated_ts.timestamp() * 1000),
                 )
             else:
                 return LayerResponsePublic(
                     id=str(layer.id),
                     name=layer.name,
                     description=layer.description,
+                    created_ts=int(layer.created_ts.timestamp() * 1000),
+                    updated_ts=int(layer.updated_ts.timestamp() * 1000),
                 )
 
     except Exception as e:
@@ -209,6 +214,8 @@ async def get_layers(editor_status=Depends(get_editor_status_optional)):
                             name=layer.name,
                             description=layer.description,
                             is_hidden=layer.is_hidden,
+                            created_ts=int(layer.created_ts.timestamp() * 1000),
+                            updated_ts=int(layer.updated_ts.timestamp() * 1000),
                         )
                     )
             else:
@@ -218,6 +225,8 @@ async def get_layers(editor_status=Depends(get_editor_status_optional)):
                             id=str(layer.id),
                             name=layer.name,
                             description=layer.description,
+                            created_ts=int(layer.created_ts.timestamp() * 1000),
+                            updated_ts=int(layer.updated_ts.timestamp() * 1000),
                         )
                     )
 
@@ -301,6 +310,8 @@ async def update_layer(
                 "name": updated_layer.name,
                 "description": updated_layer.description,
                 "is_hidden": updated_layer.is_hidden,
+                "created_ts": int(layer.created_ts.timestamp() * 1000),
+                "updated_ts": int(layer.updated_ts.timestamp() * 1000),
             }
 
     except Exception as e:
