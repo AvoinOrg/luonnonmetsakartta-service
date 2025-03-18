@@ -17,9 +17,6 @@ services:
       # - ./.conda-pkgs:/root/conda/pkgs
       - ./.vscode-server:/root/.vscode-server
       - python-dev:/root/dev
-      - type: bind
-        source: $HOST_SSH_AUTH_SOCK # e.g. /home/<youruser>/.ssh/agent.sock
-        target: /ssh-agent
     entrypoint: [ "/bin/bash", "/app/docker-entrypoint.sh" ]
     networks:
       - luonnonmetsakartta-net
@@ -35,7 +32,8 @@ services:
     # - ${CERT_DIR}/fullchain.pem:${CERT_DIR}/fullchain.pem
     # - ${CERT_DIR}/privkey.pem:${CERT_DIR}/privkey.pem
     # - ${CERT_DIR}/server.crt:${CERT_DIR}/server.crt
-    #   - /mnt/postgis-data:/var/lib/postgresql
+    volumes:
+      - postgis-dev:/var/lib/postgresql
     ports:
       - ${DEV_POSTGRES_OUT_PORT}:${DEV_POSTGRES_PORT}
     environment:
@@ -119,6 +117,8 @@ services:
 volumes:
   python-dev:
     driver: local
+  postgis-dev:
+
 
 networks:
   luonnonmetsakartta-net:
