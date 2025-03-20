@@ -1,13 +1,16 @@
 from contextlib import asynccontextmanager
+import json
 import shutil
 import tempfile
-from pathlib import Path
-from fastapi import Depends, UploadFile, File, Form, HTTPException, status
+from typing import Any
+from fastapi import Depends, UploadFile, File, Form, HTTPException
 from uuid import UUID
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+import geoalchemy2
 from pydantic import BaseModel
+import geopandas as gpd
 
 from app import config
 from app.auth.utils import get_editor_status_optional, get_editor_status
@@ -28,6 +31,7 @@ from app.api.geoserver import (
     delete_geoserver_layer,
     set_layer_visibility,
 )
+from app.db.forest_area import get_forest_areas_by_layer_id
 
 logger = get_logger(__name__)
 global_settings = config.get_settings()
@@ -317,6 +321,110 @@ async def update_layer(
     except Exception as e:
         logger.error(e)
         raise HTTPException(status_code=500, detail=f"Failed to update layer: {str(e)}")
+
+
+class GeoJSONFeature(BaseModel):
+    type: str = "Feature"
+    id: str
+    geometry: dict[str, Any]
+    properties: dict[str, Any]
+
+
+class GeoJSONFeatureCollection(BaseModel):
+    type: str = "FeatureCollection"
+    features: list[GeoJSONFeature]
+
+
+@app.get(path="/layer/{layer_id}/areas")
+async def get_areas_for_layer(
+    layer_id: str, editor_status=Depends(get_editor_status_optional)
+):
+    """
+    Fetch all areas (geometries) for a specific layer as a GeoJSON FeatureCollection.
+    Regular users can only access areas from non-hidden layers.
+    Editors can access all areas.
+    """
+    try:
+        async with connection.get_async_context_db() as session:
+            # First check if layer exists and if user has permission
+            layer = await get_forest_layer_by_id(session, id=layer_id)
+
+            if not layer:
+                raise HTTPException(
+                    status_code=404, detail=f"Layer with id {layer_id} not found"
+                )
+
+            if not editor_status.get("is_editor") and layer.is_hidden:
+                raise HTTPException(
+                    status_code=403,
+                    detail="User does not have permission to view areas in this layer",
+                )
+
+            # Get all areas for this layer
+            areas = await get_forest_areas_by_layer_id(session, layer_id)
+
+            # Convert to GeoJSON features
+            features = []
+            for area in areas:
+                geom = area.geometry
+                if geom:
+                    # Convert WKBElement to Shapely geometry
+                    shapely_geom = geoalchemy2.shape.to_shape(geom)
+                    # Convert Shapely geometry to GeoJSON
+                    geojson_dict = shapely_geom.__geo_interface__
+                    geometry_json = geojson_dict
+                else:
+                    geometry_json = None
+
+                properties = {
+                    "id": str(area.id),
+                    "layer_id": str(area.layer_id),
+                    "name": area.name if hasattr(area, "name") else None,
+                    "description": area.description
+                    if hasattr(area, "description")
+                    else None,
+                    "municipality": area.municipality
+                    if hasattr(area, "municipality")
+                    else None,
+                    "region": area.region if hasattr(area, "region") else None,
+                    "area_ha": float(area.area_ha) if area.area_ha else None,
+                    "date": area.date if hasattr(area, "date") else None,
+                    "created_ts": int(area.created_ts.timestamp() * 1000)
+                    if area.created_ts
+                    else None,
+                    "updated_ts": int(area.updated_ts.timestamp() * 1000)
+                    if area.updated_ts
+                    else None,
+                }
+
+                # Include original properties if available
+                if hasattr(area, "original_properties") and area.original_properties:
+                    properties.update(area.original_properties)
+
+                # Include pictures if available
+                if hasattr(area, "pictures") and area.pictures:
+                    properties["pictures"] = area.pictures
+
+                if geometry_json:  # Only add features with valid geometry
+                    features.append(
+                        GeoJSONFeature(
+                            id=str(area.id),
+                            geometry=geometry_json,
+                            properties=properties,
+                        )
+                    )
+
+            # Return as a GeoJSON FeatureCollection
+            return GeoJSONFeatureCollection(features=features)
+
+    except HTTPException as he:
+        raise he
+    except Exception as e:
+        logger.error(e)
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to fetch areas for layer {layer_id}: {str(e)}",
+        )
 
 
 @app.get("/admin/validate")
