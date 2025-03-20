@@ -486,3 +486,75 @@ async def test_update_layer_no_roles(
         headers=auth_headers_no_roles,
     )
     assert response.status_code == 403
+
+
+@pytest.mark.order(order_num + 10)
+@pytest.mark.asyncio
+async def test_get_areas_for_layer(
+    client: httpx.AsyncClient,
+    test_layers,
+    auth_headers,
+    auth_headers_no_roles,
+    prod_monkeypatch_get_async_context_db,
+):
+    """Test the endpoint to get all areas for a layer"""
+
+    hidden_layer_id = test_layers[0]  # First layer is hidden
+    public_layer_id = test_layers[1]  # Second layer is public
+
+    # Test 1: Editor can access areas from hidden layer
+    response = await client.get(f"/layer/{hidden_layer_id}/areas", headers=auth_headers)
+    assert response.status_code == 200
+    geojson = response.json()
+
+    # Verify GeoJSON structure
+    assert "type" in geojson
+    assert geojson["type"] == "FeatureCollection"
+    assert "features" in geojson
+    assert isinstance(geojson["features"], list)
+
+    # Check features if any exist
+    for feature in geojson["features"]:
+        assert "type" in feature
+        assert feature["type"] == "Feature"
+        assert "id" in feature
+        assert "geometry" in feature
+        assert "properties" in feature
+        assert "layer_id" in feature["properties"]
+        assert feature["properties"]["layer_id"] == hidden_layer_id
+
+    # Test 2: Regular users cannot access areas from hidden layer
+    response = await client.get(
+        f"/layer/{hidden_layer_id}/areas", headers=auth_headers_no_roles
+    )
+    assert response.status_code == 403
+
+    # Test 3: Non-authenticated users cannot access areas from hidden layer
+    response = await client.get(f"/layer/{hidden_layer_id}/areas")
+    assert response.status_code == 403
+
+    # Test 4: Everyone can access areas from public layer
+    # Editor
+    response = await client.get(f"/layer/{public_layer_id}/areas", headers=auth_headers)
+    assert response.status_code == 200
+    geojson = response.json()
+    assert geojson["type"] == "FeatureCollection"
+
+    # Regular authenticated user
+    response = await client.get(
+        f"/layer/{public_layer_id}/areas", headers=auth_headers_no_roles
+    )
+    assert response.status_code == 200
+    geojson = response.json()
+    assert geojson["type"] == "FeatureCollection"
+
+    # Non-authenticated user
+    response = await client.get(f"/layer/{public_layer_id}/areas")
+    assert response.status_code == 200
+    geojson = response.json()
+    assert geojson["type"] == "FeatureCollection"
+
+    # Test 5: Non-existent layer returns 404
+    fake_layer_id = "00000000-0000-0000-0000-000000000000"
+    response = await client.get(f"/layer/{fake_layer_id}/areas", headers=auth_headers)
+    assert response.status_code == 404
