@@ -246,6 +246,7 @@ async def get_layers(editor_status=Depends(get_editor_status_optional)):
         raise HTTPException(status_code=500, detail=f"Failed to fetch layers: {str(e)}")
 
 
+# TODO: for each updated area, invalidate the cache by bounding box.
 @app.patch(path="/layer/{layer_id}")
 async def update_layer(
     layer_id: UUID,
