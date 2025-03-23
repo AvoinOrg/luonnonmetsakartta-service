@@ -18,12 +18,68 @@ def get_layer_name_for_id(layer_id: str | UUID) -> str:
     return f"forest_areas_{layer_id}"
 
 
+async def get_layer_bounds(layer_id: str | UUID) -> dict:
+    """Calculate the bounding box for a layer in both native SRS and lat/lon."""
+    async with connection.get_async_context_db() as session:
+        # Get bounds in native SRS (EPSG:3067)
+        native_bounds_sql = """
+            SELECT 
+                ST_XMin(ST_Extent(geometry)) as minx,
+                ST_XMax(ST_Extent(geometry)) as maxx, 
+                ST_YMin(ST_Extent(geometry)) as miny,
+                ST_YMax(ST_Extent(geometry)) as maxy
+            FROM forest_area 
+            WHERE layer_id = :layer_id
+        """
+
+        # Get bounds in WGS84 (EPSG:4326)
+        lonlat_bounds_sql = """
+            SELECT 
+                ST_XMin(ST_Extent(ST_Transform(geometry, 4326))) as lon_minx,
+                ST_XMax(ST_Extent(ST_Transform(geometry, 4326))) as lon_maxx,
+                ST_YMin(ST_Extent(ST_Transform(geometry, 4326))) as lon_miny,
+                ST_YMax(ST_Extent(ST_Transform(geometry, 4326))) as lon_maxy
+            FROM forest_area 
+            WHERE layer_id = :layer_id
+        """
+
+        # Execute native bounds query
+        result = await session.execute(text(native_bounds_sql), {"layer_id": layer_id})
+        native_bounds = result.mappings().first()
+
+        # Execute lat/lon bounds query
+        result = await session.execute(text(lonlat_bounds_sql), {"layer_id": layer_id})
+        lonlat_bounds = result.mappings().first()
+
+        # Combine results
+        bounds = {**native_bounds, **lonlat_bounds}
+
+        # Provide default bounds if no data exists
+        if bounds["minx"] is None:
+            # Default bounds for Finland in EPSG:3067
+            bounds = {
+                "minx": 50000,
+                "maxx": 750000,
+                "miny": 6600000,
+                "maxy": 7800000,
+                "lon_minx": 19.0,
+                "lon_maxx": 32.0,
+                "lon_miny": 59.5,
+                "lon_maxy": 70.0,
+            }
+
+        return bounds
+
+
 async def create_geoserver_layer(
     forest_layer_id: str,
     forest_layer_name: str,
     is_hidden: bool = True,
 ) -> bool:
     """Create GeoServer layer for forest areas with given layer_id."""
+
+    # Calculate bounds from the database first
+    # bounds = await get_layer_bounds(forest_layer_id)
 
     # SQL view parameters
     view_name = get_layer_name_for_id(layer_id=forest_layer_id)
@@ -68,9 +124,39 @@ async def create_geoserver_layer(
                     }
                 ]
             },
+            "nativeBoundingBox": {
+                "minx": 144286.33218675363,
+                "maxx": 752934.2155768903,
+                "miny": 6642928.395443255,
+                "maxy": 7796732.440183549,
+                "crs": "EPSG:3067",
+            },
+            # Finland in WGS84
+            "latLonBoundingBox": {
+                "minx": 20.6455928891,
+                "maxx": 31.5160921567,
+                "miny": 59.846373196,
+                "maxy": 70.1641930203,
+                "crs": "EPSG:4326",
+            },
+            # "nativeBoundingBox": {
+            #     "minx": bounds["minx"],
+            #     "maxx": bounds["maxx"],
+            #     "miny": bounds["miny"],
+            #     "maxy": bounds["maxy"],
+            #     "crs": "EPSG:3067",
+            # },
+            # "latLonBoundingBox": {
+            #     "minx": bounds["lon_minx"],
+            #     "maxx": bounds["lon_maxx"],
+            #     "miny": bounds["lon_miny"],
+            #     "maxy": bounds["lon_maxy"],
+            #     "crs": "EPSG:4326",
+            # },
         }
     }
 
+    # Rest of your function remains the same
     async with httpx.AsyncClient() as client:
         # Create new feature type
         response = await client.post(
