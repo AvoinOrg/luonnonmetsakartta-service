@@ -118,10 +118,26 @@ async def create_geoserver_layer(
             },
             "attributes": {
                 "attribute": [
+                    {"name": "id", "binding": "java.lang.String"},
+                    {"name": "created_ts", "binding": "java.sql.Timestamp"},
+                    {"name": "updated_ts", "binding": "java.sql.Timestamp"},
+                    {"name": "name", "binding": "java.lang.String"},
+                    {
+                        "name": "description",
+                        "binding": "org.locationtech.jts.geom.Geometry",
+                    },
+                    {
+                        "name": "pictures",
+                        "binding": "org.locationtech.jts.geom.Geometry",
+                    },
+                    {"name": "municipality", "binding": "java.lang.String"},
+                    {"name": "region", "binding": "java.lang.String"},
+                    {"name": "area_ha", "binding": "java.lang.Double"},
+                    {"name": "date", "binding": "java.lang.String"},
                     {
                         "name": "geometry",
                         "binding": "org.locationtech.jts.geom.Geometry",
-                    }
+                    },
                 ]
             },
             "nativeBoundingBox": {
