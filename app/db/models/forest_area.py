@@ -1,7 +1,7 @@
 from datetime import datetime
 from uuid import uuid4
 
-from sqlalchemy import Numeric, Text, text
+from sqlalchemy import Computed, Numeric, Text, text
 from sqlalchemy.dialects.postgresql import UUID, JSONB, TIMESTAMP
 from sqlalchemy.orm import Mapped, mapped_column
 from geoalchemy2 import Geometry
@@ -38,4 +38,9 @@ class ForestArea(Base):
     geometry: Mapped[Geometry] = mapped_column(
         Geometry(geometry_type="GEOMETRY", srid=3067), nullable=True
     )  # do multipolygons work?
+    centroid: Mapped[Geometry] = mapped_column(
+        Geometry(geometry_type="POINT", srid=3067),
+        Computed("ST_Centroid(geometry) STORED", persisted=True),
+        nullable=True,
+    )
     original_properties: Mapped[Optional[dict]] = mapped_column(JSONB, nullable=True)
