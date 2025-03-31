@@ -27,7 +27,7 @@ from app.db.forest_layer import (
     update_forest_layer,
 )
 from app.api.geoserver import (
-    create_geoserver_layer,
+    create_geoserver_layers,
     delete_geoserver_layer,
     set_layer_visibility,
 )
@@ -91,6 +91,7 @@ async def create_layer(
             status_code=400, detail=f"Missing filename in main .shp file"
         )
 
+    layer_id = None
     try:
         with tempfile.NamedTemporaryFile(suffix=".zip") as temp_file:
             shutil.copyfileobj(zip_file.file, temp_file)
@@ -100,8 +101,9 @@ async def create_layer(
                 layer = await import_shapefile_to_layer(
                     session, temp_file.name, name, description, is_hidden=is_hidden
                 )
+                layer_id = layer.id
                 layer_name = f"layer_{layer.id}"
-                await create_geoserver_layer(layer.id, layer_name, is_hidden=is_hidden)
+                await create_geoserver_layers(layer.id, layer_name, is_hidden=is_hidden)
 
                 return LayerResponse(
                     id=str(layer.id),
@@ -115,6 +117,21 @@ async def create_layer(
 
     except Exception as e:
         logger.error(e)
+
+        # attempt cleanup
+        if layer_id:
+            try:
+                await delete_geoserver_layer(layer_id)
+            except Exception as e1:
+                logger.error(f"Failed to delete GeoServer layer: {e1}")
+                # Continue with database deletion even if GeoServer fails
+
+            try:
+                async with connection.get_async_context_db() as session:
+                    await delete_forest_layer_by_id(session, str(layer_id))
+            except Exception as e2:
+                logger.error(f"Failed to delete layer from database: {e2}")
+
         raise HTTPException(
             status_code=400, detail=f"Failed to import shapefile: {str(e)}"
         )
