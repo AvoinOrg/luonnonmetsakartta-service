@@ -10,6 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.db.forest_layer import get_index_name_for_id
 from app.db.models.forest_area import ForestArea
 from app.db.models.forest_layer import ForestLayer
+from app.utils.general import fix_encoding
 
 from app.utils.logger import get_logger
 
@@ -196,9 +197,9 @@ async def import_shapefile_to_layer(
             props = row.to_dict()
             props.pop("geometry", None)
 
-            name = props.pop("nimi", f"Area {idx + 1}")
-            municipality = props.pop("kunta", "Unknown")
-            region = props.pop("maakunta", "Unknown")
+            name = fix_encoding(props.pop("nimi", f"Area {idx + 1}"))
+            municipality = fix_encoding(props.pop("kunta", "Unknown"))
+            region = fix_encoding(props.pop("maakunta", "Unknown"))
             area_ha = props.pop("ala_ha", 0)
             date = props.pop("paiva", None)
 
