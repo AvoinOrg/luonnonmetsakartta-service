@@ -1,5 +1,6 @@
 from fastapi import HTTPException, Security, status
 from fastapi.security import OAuth2PasswordBearer
+
 from app.auth.validator import ZitadelIntrospectTokenValidator, ValidatorError
 from app.utils.logger import get_logger
 from app.config import get_settings
