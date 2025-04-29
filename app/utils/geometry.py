@@ -155,6 +155,7 @@ async def import_shapefile_to_layer(
     db_session: AsyncSession,
     zip_path: str,
     layer_name: str,
+    color_code: str,
     description: str | None = None,
     is_hidden: bool = True,
 ) -> ForestLayer:
@@ -178,6 +179,7 @@ async def import_shapefile_to_layer(
             name=layer_name,
             description=description,
             is_hidden=is_hidden,
+            color_code=color_code,
             original_properties={
                 "crs": str(object=gdf.crs),
                 "columns": list(gdf.columns),
