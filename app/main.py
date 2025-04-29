@@ -271,8 +271,9 @@ async def update_layer(
     description: str | None = Form(None),
     zip_file: UploadFile | None = File(None),
     shapefile_id_col: str | None = Form(None),
-    overwrite_existing: bool = Form(False),
     is_hidden: bool | None = Form(None),
+    color_code: str | None = Form(None),
+    overwrite_existing: bool = Form(False),
     editor_status=Depends(get_editor_status),
 ):
     if not editor_status.get("is_editor"):  # Check if user is editor
@@ -294,6 +295,8 @@ async def update_layer(
                 layer.name = name
             if description:
                 layer.description = description
+            if color_code:
+                layer.color_code = color_code
 
             if is_hidden is not None:
                 if layer.is_hidden == is_hidden:
