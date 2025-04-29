@@ -85,14 +85,30 @@ async def update_layer_areas(
             geom = to_2d(row.geometry)
             attributes = row.to_dict()
             attributes.pop("geometry", None)  # geometry handled separately
+            attr_lower_map = {k.lower(): k for k in attributes.keys()}
+            shapefile_id_col_lower = (
+                shapefile_id_col.lower() if shapefile_id_col else None
+            )
+
+            # --- Extract attributes case-insensitively ---
+            def pop_case_insensitive(key_lower, default=None):
+                original_key = attr_lower_map.get(key_lower)
+                if original_key:
+                    return attributes.pop(original_key, default)
+                return default
 
             # Attempt to match existing forest_area by shapefile_id_col
-            sf_id_val = attributes.get(shapefile_id_col)
-            name = attributes.pop("nimi", f"UpdatedArea {idx + 1}")
-            municipality = attributes.pop("kunta", "Unknown")
-            region = attributes.pop("maakunta", "Unknown")
-            area_ha = attributes.pop("ala_ha", 0)
-            date = attributes.pop("paiva", None)
+            sf_id_val = (
+                pop_case_insensitive(shapefile_id_col_lower)
+                if shapefile_id_col_lower
+                else None
+            )
+            name = pop_case_insensitive("nimi", f"UpdatedArea {idx + 1}")
+            municipality = pop_case_insensitive("kunta", "Unknown")
+            region = pop_case_insensitive("maakunta", "Unknown")
+            area_ha = pop_case_insensitive("ala_ha", 0)
+            owner = pop_case_insensitive("omistus")  # Assuming 'Omistus' might vary
+            date = pop_case_insensitive("paiva")
 
             merged_props = clean_properties(attributes)
             if sf_id_val:
@@ -107,6 +123,7 @@ async def update_layer_areas(
                 area_obj.region = region
                 area_obj.area_ha = area_ha
                 area_obj.date = date
+                area_obj.owner = owner
                 area_obj.geometry = f"SRID={srid};{geom.wkt}"  # GeoAlchemy2-compatible
                 area_obj.original_properties = {
                     **(area_obj.original_properties or {}),
