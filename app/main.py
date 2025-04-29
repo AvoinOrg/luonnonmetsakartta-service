@@ -77,6 +77,7 @@ async def create_layer(
     name: str = Form(...),
     description: str = Form(None),
     is_hidden: bool = Form(True),
+    color_code: str = Form(default="#0000FF"),
     zip_file: UploadFile = File(...),
     editor_status: dict = Depends(get_editor_status),
 ):
@@ -99,7 +100,12 @@ async def create_layer(
 
             async with connection.get_async_context_db() as session:
                 layer = await import_shapefile_to_layer(
-                    session, temp_file.name, name, description, is_hidden=is_hidden
+                    session,
+                    temp_file.name,
+                    name,
+                    color_code=color_code,
+                    description=description,
+                    is_hidden=is_hidden,
                 )
                 layer_id = layer.id
                 layer_name = f"layer_{layer.id}"
