@@ -35,6 +35,7 @@ class ForestArea(Base):
     region: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     area_ha: Mapped[Optional[float]] = mapped_column(Numeric, nullable=True)
     date: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    owner: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     geometry: Mapped[Geometry] = mapped_column(
         Geometry(geometry_type="GEOMETRY", srid=3067), nullable=True
     )  # do multipolygons work?
