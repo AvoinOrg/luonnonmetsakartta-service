@@ -108,6 +108,7 @@ async def update_layer_areas(
             region = pop_case_insensitive("maakunta", "Unknown")
             area_ha = pop_case_insensitive("ala_ha", 0)
             owner = pop_case_insensitive("omistus")  # Assuming 'Omistus' might vary
+            person_responsible = pop_case_insensitive("vastuuhkl")  # Assuming 'Omistus' might vary
             date = pop_case_insensitive("paiva")
 
             merged_props = clean_properties(attributes)
@@ -124,6 +125,7 @@ async def update_layer_areas(
                 area_obj.area_ha = area_ha
                 area_obj.date = date
                 area_obj.owner = owner
+                area_obj.person_responsible = person_responsible
                 area_obj.geometry = f"SRID={srid};{geom.wkt}"  # GeoAlchemy2-compatible
                 area_obj.original_properties = {
                     **(area_obj.original_properties or {}),
