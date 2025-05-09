@@ -31,7 +31,9 @@ from app.api.geoserver import (
     delete_geoserver_layer,
     set_layer_visibility,
 )
-from app.db.forest_area import get_forest_areas_by_layer_id
+from app.db.forest_area import (
+    get_forest_areas_centroids_by_layer_id,
+)
 
 logger = get_logger(__name__)
 global_settings = config.get_settings()
@@ -395,12 +397,12 @@ async def get_areas_for_layer(
                 )
 
             # Get all areas for this layer
-            areas = await get_forest_areas_by_layer_id(session, layer_id)
+            areas = await get_forest_areas_centroids_by_layer_id(session, layer_id)
 
             # Convert to GeoJSON features
             features = []
             for area in areas:
-                geom = area.geometry
+                geom: geoalchemy2.Geometry = area.centroid
                 if geom:
                     # Convert WKBElement to Shapely geometry
                     shapely_geom = geoalchemy2.shape.to_shape(geom)

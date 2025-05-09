@@ -18,6 +18,7 @@ from app.db.forest_area import (
     get_forest_area_by_name,
     get_forest_areas_by_municipality,
     get_forest_areas_by_layer_id,
+    get_forest_areas_centroids_by_layer_id,
     update_forest_area,
 )
 from app.db.connection_mock import monkeypatch_get_async_context_db, setup_and_teardown
@@ -116,6 +117,21 @@ async def test_get_forest_areas_by_layer_id(
         )
         assert len(areas) > 0
         assert areas[0].layer_id == created_forest_area.layer_id
+
+
+@pytest.mark.asyncio
+@pytest.mark.order(105)
+async def test_get_forest_areas_centroids_by_layer_id(
+    created_forest_area, monkeypatch_get_async_context_db
+):
+    async with connection.get_async_context_db() as session:
+        areas = await get_forest_areas_centroids_by_layer_id(
+            session, str(created_forest_area.layer_id)
+        )
+        assert len(areas) > 0
+        assert areas[0].layer_id == created_forest_area.layer_id
+        assert areas[0].centroid is not None
+        assert areas[0].geometry is None
 
 
 @pytest.mark.asyncio
