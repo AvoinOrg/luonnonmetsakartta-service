@@ -454,6 +454,18 @@ async def delete_geoserver_layer(forest_layer_id: str | UUID) -> bool:
                 f"Failed to delete centroid layer: ({centroid_resp.status_code}) {centroid_resp.text}"
             )
 
+        permissions_deleted = await delete_layer_permissions(view_name=area_view_name)
+        if not permissions_deleted:
+            logger.warning(f"Failed to delete permissions for layer: {area_view_name}")
+
+        permissions_deleted = await delete_layer_permissions(
+            view_name=centroid_view_name
+        )
+        if not permissions_deleted:
+            logger.warning(
+                f"Failed to delete permissions for layer: {centroid_view_name}"
+            )
+
     # 3. Clean up database views regardless of GeoServer result
     async with connection.get_async_context_db() as session:
         try:
@@ -495,6 +507,53 @@ async def get_layer_permissions(layer_id: str | UUID) -> dict:
         matching_rules = {k: v for k, v in all_rules.items() if k.startswith(prefix)}
 
         return matching_rules
+
+
+async def delete_layer_permissions(view_name: str) -> bool:
+    """
+    Deletes security rules associated with a GeoServer layer.
+    Assumes rules are identified like {workspace}.{layer_name}.r,
+    {workspace}.{layer_name}.w, and {workspace}.{layer_name}.a.
+    """
+    if not geoserver_workspace:
+        logger.error(
+            "GeoServer workspace is not configured. Cannot delete permissions."
+        )
+        return False
+
+    rule_ids_to_delete = [
+        f"{geoserver_workspace}.{view_name}.r",  # Read rule
+        f"{geoserver_workspace}.{view_name}.w",  # Write rule
+        f"{geoserver_workspace}.{view_name}.a",  # Admin rule
+    ]
+
+    all_rules_handled_successfully = True
+    async with httpx.AsyncClient(auth=(username, password)) as client:
+        for rule_id in rule_ids_to_delete:
+            delete_url = f"{geoserver_url}/rest/security/rules/{rule_id}"
+            try:
+                response = await client.delete(delete_url)
+                if response.status_code == 200:
+                    pass
+                    # logger.debug(
+                    #     msg=f"Successfully deleted GeoServer security rule: {rule_id}"
+                    # )
+                elif response.status_code == 404:
+                    pass
+                    # logger.debug(
+                    #     f"GeoServer security rule not found (considered success as it doesn't exist): {rule_id}"
+                    # )
+                else:
+                    logger.error(
+                        f"Failed to delete GeoServer security rule {rule_id}: {response.status_code} - {response.text}"
+                    )
+                    all_rules_handled_successfully = False
+            except httpx.RequestError as e:
+                logger.error(
+                    f"HTTP request error deleting GeoServer security rule {rule_id}: {e}"
+                )
+                all_rules_handled_successfully = False
+    return all_rules_handled_successfully
 
 
 async def set_layer_visibility(

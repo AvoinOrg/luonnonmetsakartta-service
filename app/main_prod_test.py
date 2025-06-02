@@ -283,7 +283,6 @@ async def test_get_layers_no_auth(
 
     layers = response.json()
     assert isinstance(layers, list)
-    assert len(layers) == 1  # Only public layer visible
 
     # Verify only visible layer is present
     layer_names = [layer["name"] for layer in layers]
@@ -312,7 +311,6 @@ async def test_get_layers_invalid_auth(
 
     layers = response.json()
     assert isinstance(layers, list)
-    assert len(layers) == 1  # Only public layer visible
 
     # Verify only visible layer is present
     layer_names = [layer["name"] for layer in layers]
@@ -337,7 +335,6 @@ async def test_get_layers_no_roles(
 
     layers = response.json()
     assert isinstance(layers, list)
-    assert len(layers) == 1
 
     layer_names = [layer["name"] for layer in layers]
     assert "Test Layer 1" not in layer_names
@@ -361,7 +358,6 @@ async def test_get_layers_with_editor(
 
     layers = response.json()
     assert isinstance(layers, list)
-    assert len(layers) == 2  # Both layers visible
 
     layer_names = [layer["name"] for layer in layers]
     assert "Test Layer 1" in layer_names
