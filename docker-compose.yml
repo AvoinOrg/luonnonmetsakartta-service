@@ -79,11 +79,6 @@ services:
     #   resources:
     #     limits:
     #       memory: ${POSTGRES_CONTAINER_MEM}
-    logging:
-      driver: json-file
-      options:
-        max-size: "10m"
-        max-file: "3"
 
   postgis-test:
     profiles: [ dev, sandbox ]
@@ -124,11 +119,6 @@ services:
     #   resources:
     #     limits:
     #       memory: ${POSTGRES_CONTAINER_MEM}
-    logging:
-      driver: json-file
-      options:
-        max-size: "10m"
-        max-file: "3"
 
 volumes:
   python-dev:

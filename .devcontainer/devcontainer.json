@@ -5,7 +5,7 @@
     "dockerComposeFile": [
         "../docker-compose.yml"
     ],
-    "service": "app-dev",
+    "service": "app-sandbox",
     "workspaceFolder": "/app",
     "customizations": {
         "vscode": {
@@ -38,7 +38,9 @@
     //   "SOCK=/var/run/docker.sock; GID=$(stat -c '%g' $SOCK); if ! getent group $GID >/dev/null 2>&1; then groupadd -g $GID host-docker; fi; usermod -aG $GID node"
     // ],
     "runServices": [
-        "app-dev"
+        "app-sandbox",
+        "postgis-dev",
+        "postgis-test"
     ],
     // Mount the **stable** SSH-agent socket
     "mounts": [
