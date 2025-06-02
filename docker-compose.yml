@@ -1,7 +1,6 @@
 services:
   app-dev:
     profiles: [ dev ]
-    container_name: luonnonmetsakartta-service
     build: .
     env_file:
       - ./.env
@@ -22,7 +21,6 @@ services:
 
   app-sandbox:
     profiles: [ sandbox ]
-    container_name: luonnonmetsakartta-service
     build: .
     env_file:
       - ./.env
@@ -44,7 +42,6 @@ services:
   postgis-dev:
     profiles: [ dev ]
     image: kartoza/postgis:${DEV_POSTGRES_VERSION}
-    container_name: ${DEV_POSTGRES_HOST}
     hostname: ${DEV_POSTGRES_HOST}
     env_file:
       - .env
@@ -91,7 +88,6 @@ services:
   postgis-test:
     profiles: [ dev, sandbox ]
     image: kartoza/postgis:${TEST_POSTGRES_VERSION}
-    container_name: ${TEST_POSTGRES_HOST}
     hostname: ${TEST_POSTGRES_HOST}
     env_file:
       - .env
