@@ -66,7 +66,7 @@ class Settings(BaseSettings):
     )
     zitadel_project_id: str = os.getenv("ZITADEL_PROJECT_ID") or ""
     zitadel_project_editor_role: str = os.getenv("ZITADEL_PROJECT_EDITOR_ROLE") or ""
-    zitadel_project_admin_role: str = os.getenv("ZITADEL_PROJECT_ADMIN_ROLE") or ""
+    # zitadel_project_admin_role: str = os.getenv("ZITADEL_PROJECT_ADMIN_ROLE") or ""
 
 
 @lru_cache

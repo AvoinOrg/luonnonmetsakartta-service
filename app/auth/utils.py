@@ -51,9 +51,9 @@ async def get_editor_status_optional(token: str = Security(oauth2_scheme_optiona
         return editor_status
 
 
-async def get_admin_status(token: str = Security(oauth2_scheme)):
-    result = await get_scope_status([settings.zitadel_project_admin_role], token)
-    return {"is_admin": result}
+# async def get_admin_status(token: str = Security(oauth2_scheme)):
+#     result = await get_scope_status([settings.zitadel_project_admin_role], token)
+#     return {"is_admin": result}
 
 
 # async def get_current_user(token: str = Security(oauth2_scheme)):
