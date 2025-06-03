@@ -175,15 +175,7 @@ async def create_geoserver_layer(
         CREATE OR REPLACE VIEW {view_name} AS
         SELECT 
             id,
-            created_ts,
-            updated_ts,
             name,
-            description,
-            pictures,
-            municipality,
-            region,
-            area_ha,
-            date,
             geometry
         FROM forest_area 
         WHERE layer_id::text = '{str(forest_layer_id)}'
@@ -318,6 +310,14 @@ async def create_geoserver_centroid_layer(
         SELECT 
             id,
             name,
+            created_ts,
+            updated_ts,
+            description,
+            pictures,
+            municipality,
+            region,
+            area_ha,
+            date,
             centroid AS geometry
         FROM forest_area 
         WHERE layer_id::text = '{str(forest_layer_id)}'
