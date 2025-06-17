@@ -27,6 +27,7 @@ class ForestArea(Base):
     updated_ts: Mapped[datetime] = mapped_column(
         TIMESTAMP,
         server_default=text("current_timestamp(0)"),
+        onupdate=text("current_timestamp(0)"),
     )
     name: Mapped[str] = mapped_column(Text, nullable=False)
     description: Mapped[Optional[str]] = mapped_column(JSONB, nullable=True)
