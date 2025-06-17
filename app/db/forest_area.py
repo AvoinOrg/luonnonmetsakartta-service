@@ -15,6 +15,19 @@ async def get_forest_area_by_id(
     return area if area else None
 
 
+async def get_forest_area_by_ids(  # New function
+    db_session: AsyncSession, layer_id: str, area_id: str
+) -> Optional[ForestArea]:
+    """
+    Retrieves a specific ForestArea by its ID and Layer ID.
+    """
+    result = await db_session.execute(
+        select(ForestArea).filter_by(id=area_id, layer_id=layer_id)
+    )
+    area = result.scalars().first()
+    return area if area else None
+
+
 async def get_all_forest_areas(db_session: AsyncSession) -> List[ForestArea]:
     result = await db_session.execute(select(ForestArea))
     return list(result.scalars().all())
