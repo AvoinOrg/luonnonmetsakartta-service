@@ -24,7 +24,13 @@
                 "ms-toolsai.jupyter-renderers",
                 "ms-toolsai.vscode-jupyter-cell-tags",
                 "ms-toolsai.vscode-jupyter-slideshow"
-            ]
+            ],
+            "settings": {
+                "[python]": {
+                    "editor.defaultFormatter": "charliermarsh.ruff",
+                },
+                "ruff.format": true
+            }
         }
     },
     // "initializeCommand": "sudo groupadd -f -g $(stat -c '%g' /var/run/docker.sock) docker && sudo usermod -aG $(stat -c '%g' /var/run/docker.sock) $(id -un)",
