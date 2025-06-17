@@ -33,10 +33,10 @@ python-multipart = "^0.0.19"
 pytest = "^8.3.4"
 authlib = "^1.4.1"
 ftfy = "^6.3.1"
+black = "^25.1.0"
 
 [tool.poetry.group.dev.dependencies]
 jupyter = "^1.1.1"
-black = "^24.10.0"
 
 [build-system]
 requires = ["poetry-core>=1.0.0"]
