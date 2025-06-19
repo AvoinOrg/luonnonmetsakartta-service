@@ -607,7 +607,7 @@ async def _set_single_layer_visibility(
     Helper function to set visibility for a single layer.
 
     Args:
-        layer_name: The exact layer name in GeoServer
+        layer_name: The exact layer in GeoServer
         is_hidden: Whether layer should be hidden from non-editors
         is_initial_rule: Whether this is the first rule setup
     """
@@ -661,10 +661,10 @@ async def _set_single_layer_visibility(
 
 
 async def _truncate_gwc_tiles_for_gridset(
-    raw_layer_name: str,  # e.g., forest_areas_uuid (without workspace)
+    raw_layer_name: str,
     bounds_coords: tuple[float, float, float, float],
-    bounds_srs_code: int,  # e.g., 3067 or 3857
-    gridset_id_to_truncate: str,  # e.g., "EPSG:3067" or "EPSG:900913"
+    bounds_srs_code: int,
+    gridset_id_to_truncate: str,
     tile_format: str = "application/vnd.mapbox-vector-tile",
 ) -> bool:
     """
@@ -674,6 +674,13 @@ async def _truncate_gwc_tiles_for_gridset(
         logger.error("GeoServer workspace not configured. Cannot truncate GWC tiles.")
         return False
 
+    # Validate bounding box values
+    if any(coord is None for coord in bounds_coords):
+        logger.error(
+            f"Invalid bounding box values for truncation: {bounds_coords}. Skipping request."
+        )
+        return False
+
     full_layer_name = f"{geoserver_workspace}:{raw_layer_name}"
     # GeoWebCache seed/truncate URL structure
     gwc_seed_url = f"{geoserver_url}/gwc/rest/seed/{full_layer_name}.json"
@@ -681,21 +688,29 @@ async def _truncate_gwc_tiles_for_gridset(
     payload = {
         "seedRequest": {
             "name": full_layer_name,
-            "bounds": {"coords": list(bounds_coords)},
-            "srs": {"number": bounds_srs_code},  # SRS of the provided bounds
-            "gridSetId": gridset_id_to_truncate,  # The ID of the gridset in GWC
-            "type": "truncate",  # Action: truncate, seed, reseed
-            "threadCount": 1,  # Number of threads for the operation
-            "format": tile_format,  # Tile format to truncate
-            # Optional: Add parameters if needed, e.g., for specific styles
-            # "parameters": {"STYLES": ""} # Clears default style tiles
+            "coords": {
+                "bounds": {
+                    "minx": bounds_coords[0],
+                    "miny": bounds_coords[1],
+                    "maxx": bounds_coords[2],
+                    "maxy": bounds_coords[3],
+                }
+            },
+            "srs": {"number": bounds_srs_code},
+            "gridSetId": gridset_id_to_truncate,
+            "type": "truncate",
+            "threadCount": 1,
+            "format": tile_format,
+            "zoomStart": 0,
+            "zoomStop": 20,
         }
     }
+
+    logger.debug(f"Payload for GWC truncation: {json.dumps(payload, indent=2)}")
 
     async with httpx.AsyncClient(auth=(username, password)) as client:
         try:
             response = await client.post(gwc_seed_url, json=payload)
-            # Successful GWC operations might return 200 OK or 202 Accepted
             if response.status_code in [200, 202]:
                 logger.info(
                     f"GWC tile truncation successfully requested for {full_layer_name}, "
@@ -707,7 +722,6 @@ async def _truncate_gwc_tiles_for_gridset(
                     f"Failed to truncate GWC tiles for {full_layer_name}, gridset {gridset_id_to_truncate}. "
                     f"Status: {response.status_code}, Response: {response.text}"
                 )
-                logger.debug(f"GWC truncation payload: {json.dumps(payload)}")
                 return False
         except httpx.RequestError as e:
             logger.error(
@@ -728,13 +742,12 @@ async def invalidate_geoserver_cache_for_feature(
 ):
     """
     Invalidates GeoServer GWC tile cache for a specific feature within a layer.
-    It attempts to clear tiles for common gridsets (EPSG:3067 and EPSG:900913).
+    It attempts to clear tiles for EPSG:900913
     """
     logger.info(
         f"Attempting to invalidate GeoServer cache for feature {feature_id_uuid} in layer {layer_id_uuid}"
     )
 
-    bounds_3067 = None
     bounds_3857 = None  # For EPSG:900913 (Web Mercator) gridset
 
     async with connection.get_async_context_db() as session:
@@ -745,10 +758,6 @@ async def invalidate_geoserver_cache_for_feature(
                 SELECT geometry FROM forest_area WHERE id = :feature_id AND layer_id = :layer_id
             )
             SELECT
-                ST_XMin(ST_Extent(geometry)) as minx_3067,
-                ST_YMin(ST_Extent(geometry)) as miny_3067,
-                ST_XMax(ST_Extent(geometry)) as maxx_3067,
-                ST_YMax(ST_Extent(geometry)) as maxy_3067,
                 ST_XMin(ST_Extent(ST_Transform(geometry, 3857))) as minx_3857,
                 ST_YMin(ST_Extent(ST_Transform(geometry, 3857))) as miny_3857,
                 ST_XMax(ST_Extent(ST_Transform(geometry, 3857))) as maxx_3857,
@@ -769,18 +778,6 @@ async def invalidate_geoserver_cache_for_feature(
             )
             return
 
-        # Check and assign bounds for EPSG:3067
-        if not any(
-            bounds_data[k] is None
-            for k in ["minx_3067", "miny_3067", "maxx_3067", "maxy_3067"]
-        ):
-            bounds_3067 = (
-                bounds_data["minx_3067"],
-                bounds_data["miny_3067"],
-                bounds_data["maxx_3067"],
-                bounds_data["maxy_3067"],
-            )
-
         # Check and assign bounds for EPSG:3857
         if not any(
             bounds_data[k] is None
@@ -793,7 +790,7 @@ async def invalidate_geoserver_cache_for_feature(
                 bounds_data["maxy_3857"],
             )
 
-    if not bounds_3067 and not bounds_3857:
+    if not bounds_3857:
         logger.warning(
             f"Could not determine valid bounds for feature {feature_id_uuid}. Skipping GeoServer cache invalidation."
         )
@@ -802,15 +799,16 @@ async def invalidate_geoserver_cache_for_feature(
     area_layer_raw_name = get_layer_name_for_id(layer_id_uuid)
     centroid_layer_raw_name = get_layer_centroid_name_for_id(layer_id_uuid)
 
-    tile_format = "application/vnd.mapbox-vector-tile"  # Common tile format; adjust if different
+    tile_format = (
+        "application/vnd.mapbox-vector-tile"  # Common tile format; adjust if different
+    )
 
     # Define gridsets to attempt truncation for.
     # The gridset_id must match what's configured in GWC.
     # (bounds_for_this_gridset, srs_code_of_bounds)
     gridset_configs = {
-        "EPSG:3067": (bounds_3067, 3067),  # For native projection tiles
+        # Remove EPSG:3067 as it is not supported
         "EPSG:900913": (bounds_3857, 3857),  # For Web Mercator tiles (common for TMS)
-        # Add "EPSG:4326" if you also serve WGS84 tiles and have bounds for it
     }
 
     layers_to_invalidate_raw_names = [area_layer_raw_name, centroid_layer_raw_name]
@@ -820,6 +818,7 @@ async def invalidate_geoserver_cache_for_feature(
             if bounds:  # Only proceed if we have valid bounds for this SRS
                 logger.info(
                     f"Requesting GWC truncation for layer {geoserver_workspace}:{layer_raw_name}, "
+                    f"gridset {gridset_id}, bounds (SRS {srs_code}): {bounds}"
                     f"gridset {gridset_id}, bounds (SRS {srs_code}): {bounds}"
                 )
                 await _truncate_gwc_tiles_for_gridset(
@@ -834,3 +833,80 @@ async def invalidate_geoserver_cache_for_feature(
                     f"Skipping GWC truncation for layer {layer_raw_name}, gridset {gridset_id} "
                     f"due to missing/invalid bounds for its SRS {srs_code}."
                 )
+
+
+async def invalidate_geoserver_cache_for_features(
+    layer_id_uuid: UUID, feature_ids: list[UUID]
+):
+    """
+    Invalidates GeoServer GWC tile cache for a list of features within a layer.
+    It computes an overlapping bounding box for all features and clears tiles for EPSG:900913.
+    """
+    logger.info(
+        f"Attempting to invalidate GeoServer cache for features {feature_ids} in layer {layer_id_uuid}"
+    )
+
+    bounds_3857 = None  # For EPSG:900913 (Web Mercator) gridset
+
+    async with connection.get_async_context_db() as session:
+        # Fetch the combined bounding box for all features in EPSG:3857
+        stmt = text(
+            """
+            WITH feature_geoms AS (
+                SELECT ST_Transform(geometry, 3857) AS geom
+                FROM forest_area
+                WHERE id = ANY(:feature_ids) AND layer_id = :layer_id
+            )
+            SELECT
+                ST_XMin(ST_Extent(geom)) as minx,
+                ST_YMin(ST_Extent(geom)) as miny,
+                ST_XMax(ST_Extent(geom)) as maxx,
+                ST_YMax(ST_Extent(geom)) as maxy
+            FROM feature_geoms
+            WHERE geom IS NOT NULL;
+            """
+        )
+        result = await session.execute(
+            stmt,
+            {
+                "feature_ids": [str(fid) for fid in feature_ids],
+                "layer_id": str(layer_id_uuid),
+            },
+        )
+        bounds_data = result.mappings().first()
+
+        if not bounds_data or any(
+            bounds_data[k] is None for k in ["minx", "miny", "maxx", "maxy"]
+        ):
+            logger.warning(
+                f"Could not determine valid bounds for features {feature_ids}. Skipping GeoServer cache invalidation."
+            )
+            return
+
+        bounds_3857 = (
+            bounds_data["minx"],
+            bounds_data["miny"],
+            bounds_data["maxx"],
+            bounds_data["maxy"],
+        )
+
+    if not bounds_3857:
+        logger.warning(
+            f"Could not determine valid bounds for features {feature_ids}. Skipping GeoServer cache invalidation."
+        )
+        return
+
+    area_layer_raw_name = get_layer_name_for_id(layer_id_uuid)
+    tile_format = "application/vnd.mapbox-vector-tile"  # Common tile format
+
+    logger.info(
+        f"Requesting GWC truncation for layer {geoserver_workspace}:{area_layer_raw_name}, "
+        f"gridset EPSG:900913, bounds (SRS 3857): {bounds_3857}"
+    )
+    await _truncate_gwc_tiles_for_gridset(
+        raw_layer_name=area_layer_raw_name,
+        bounds_coords=bounds_3857,
+        bounds_srs_code=3857,
+        gridset_id_to_truncate="EPSG:900913",
+        tile_format=tile_format,
+    )
