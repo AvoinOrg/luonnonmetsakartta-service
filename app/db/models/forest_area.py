@@ -21,11 +21,11 @@ class ForestArea(Base):
     )
     layer_id: Mapped[str] = mapped_column(UUID(as_uuid=True), nullable=False)
     created_ts: Mapped[datetime] = mapped_column(
-        TIMESTAMP,
+        TIMESTAMP(timezone=True),  # Use TIMESTAMP WITH TIME ZONE
         server_default=text("current_timestamp(0)"),
     )
     updated_ts: Mapped[datetime] = mapped_column(
-        TIMESTAMP,
+        TIMESTAMP(timezone=True),  # Use TIMESTAMP WITH TIME ZONE
         server_default=text("current_timestamp(0)"),
         onupdate=text("current_timestamp(0)"),
     )
