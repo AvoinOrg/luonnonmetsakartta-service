@@ -8,6 +8,7 @@ from pathlib import Path
 import geopandas as gpd
 from shapely.geometry import Polygon
 import tempfile
+import json
 
 from app.main import app, lifespan
 from app.utils.logger import get_logger
@@ -554,3 +555,115 @@ async def test_get_areas_for_layer(
     fake_layer_id = "00000000-0000-0000-0000-000000000000"
     response = await client.get(f"/layer/{fake_layer_id}/areas", headers=auth_headers)
     assert response.status_code == 404
+
+
+@pytest.fixture(scope="function")
+async def layer_with_feature_for_update(
+    client: httpx.AsyncClient,
+    mock_shapefile,  # mock_shapefile creates a shapefile with one polygon
+    auth_headers,
+    prod_monkeypatch_get_async_context_db,
+):
+    layer_id = None
+    feature_id = None
+
+    # Create a layer
+    files = [("zip_file", ("test.zip", mock_shapefile, "application/zip"))]
+    layer_data = {
+        "name": "Layer For Feature Update Test",
+        "description": "A layer to test feature updates",
+        "is_hidden": False,
+    }
+    response = await client.post(
+        "/layer", files=files, data=layer_data, headers=auth_headers
+    )
+    assert response.status_code == 200
+    layer_info = response.json()
+    layer_id = layer_info["id"]
+
+    # Get a feature from this layer
+    response = await client.get(f"/layer/{layer_id}/areas", headers=auth_headers)
+    assert response.status_code == 200
+    areas_geojson = response.json()
+    assert (
+        "features" in areas_geojson and len(areas_geojson["features"]) > 0
+    ), "Mock shapefile should create at least one feature"
+    feature_id = areas_geojson["features"][0]["id"]
+
+    yield layer_id, feature_id
+
+    # Cleanup
+    if layer_id:
+        delete_response = await client.delete(
+            f"/layer/{layer_id}", headers=auth_headers
+        )
+        assert delete_response.status_code == 200
+
+
+@pytest.mark.order(order_num + 11)  # Assuming previous test was order_num + 10
+@pytest.mark.asyncio
+async def test_update_feature_in_layer_success(
+    client: httpx.AsyncClient,
+    layer_with_feature_for_update,
+    auth_headers,
+    prod_monkeypatch_get_async_context_db,
+):
+    """Test successfully updating a feature in a layer."""
+    layer_id, feature_id = layer_with_feature_for_update
+
+    update_payload = {
+        "name": "Updated Feature Name",
+        "description": "This feature has been successfully updated.",
+        "pictures_json": json.dumps(
+            ["http://example.com/new_pic.jpg", "http://example.com/another_pic.jpg"]
+        ),
+        "municipality": "Updated Municipality",
+        "region": "Updated Region",
+        "area_ha": 123.45,
+        "date": "2025-06-15",  # Pass date as a string
+        "owner": "New Test Owner",
+        "person_responsible": "New Test Responsible Person",
+        # "geometry_geojson": json.dumps({"type": "Point", "coordinates": [26.123, 61.456]}), # EPSG:4326
+    }
+
+    response = await client.patch(
+        f"/layer/{layer_id}/area/{feature_id}",
+        data=update_payload,  # Form data
+        headers=auth_headers,
+    )
+
+    assert response.status_code == 200, f"Failed to update feature: {response.text}"
+    updated_feature = response.json()
+
+    assert updated_feature["id"] == feature_id
+    assert updated_feature["type"] == "Feature"
+
+    props = updated_feature["properties"]
+    assert props["name"] == update_payload["name"]
+    assert props["description"] == update_payload["description"]
+    assert props["pictures"] == json.loads(update_payload["pictures_json"])
+    assert props["municipality"] == update_payload["municipality"]
+    assert props["region"] == update_payload["region"]
+    assert props["area_ha"] == update_payload["area_ha"]
+    assert props["date"] == update_payload["date"]
+    assert props["owner"] == update_payload["owner"]
+    assert props["person_responsible"] == update_payload["person_responsible"]
+    assert props["layer_id"] == layer_id
+
+    # Check that original_properties (updated from original_properties_json) are merged into the main properties
+    # expected_original_props = json.loads(update_payload["original_properties_json"])
+    # for k, v in expected_original_props.items():
+    #     assert props[k] == v
+
+    # The endpoint returns the centroid of the updated geometry.
+    # The new geometry was a Point, so its centroid is itself (after SRID transformation).
+    # assert updated_feature["geometry"]["type"] == "Point"
+    # assert len(updated_feature["geometry"]["coordinates"]) == 2
+    # # We can't easily assert exact coordinates due to potential precision issues and SRID transform,
+    # # but we can check they are present and are numbers.
+    # assert isinstance(updated_feature["geometry"]["coordinates"][0], float)
+    # assert isinstance(updated_feature["geometry"]["coordinates"][1], float)
+
+    assert "updated_ts" in props and props["updated_ts"] is not None
+    if "created_ts" in props and props["created_ts"] is not None:
+        assert props["updated_ts"] >= props["created_ts"]
