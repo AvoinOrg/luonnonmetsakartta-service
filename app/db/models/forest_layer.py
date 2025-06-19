@@ -19,11 +19,11 @@ class ForestLayer(Base):
     )
     # shapefile_id_col: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     created_ts: Mapped[datetime] = mapped_column(
-        TIMESTAMP,
+        TIMESTAMP(timezone=True),
         server_default=text("current_timestamp(0)"),
     )
     updated_ts: Mapped[datetime] = mapped_column(
-        TIMESTAMP,
+        TIMESTAMP(timezone=True),
         server_default=text("current_timestamp(0)"),
     )
     is_hidden: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
