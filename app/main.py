@@ -402,7 +402,7 @@ async def get_areas_for_layer(
                 )
 
             # Get all areas for this layer
-            areas = await get_forest_areas_centroids_by_layer_id(session, layer_id)
+            areas = await get_forest_areas_centroids_by_layer_id(session, layer_id, target_srid=4326)
 
             # Convert to GeoJSON features
             features = []
