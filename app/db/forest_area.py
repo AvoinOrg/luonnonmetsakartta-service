@@ -1,7 +1,7 @@
 from typing import List, Optional, Union
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
-from sqlalchemy import delete
+from sqlalchemy import delete, func
 from sqlalchemy.exc import SQLAlchemyError
 
 from app.db.models.forest_area import ForestArea
@@ -42,37 +42,33 @@ async def get_forest_areas_by_layer_id(
     return list(result.scalars().all())
 
 
-async def get_forest_areas_centroids_by_layer_id(  # Consider renaming if not strictly for centroids
-    db_session: AsyncSession, layer_id: str
-) -> List[ForestArea]:
+async def get_forest_areas_centroids_by_layer_id(
+    db_session: AsyncSession, layer_id: str, target_srid: int = 3067
+) -> list[ForestArea]:
     """
-    Dynamically fetches all columns for ForestArea except 'geometry',
-    for a given layer_id, and returns a list of ForestArea objects.
-    The 'geometry' attribute on the returned objects will be uninitialized (None or default).
+    Fetches all ForestArea columns except 'geometry', and transforms centroid to target_srid.
     """
-
-    # Dynamically get all ForestArea model attributes except 'geometry'
-    # This list will contain things like ForestArea.id, ForestArea.name, ForestArea.centroid, etc.
     model_attributes_to_select = [
         getattr(ForestArea, col.name)
         for col in ForestArea.__table__.columns
-        if col.name != "geometry"
+        if col.name not in ("geometry", "centroid")
     ]
+    # Add transformed centroid
+    model_attributes_to_select.append(
+        func.ST_Transform(ForestArea.centroid, target_srid).label("centroid")
+    )
 
     stmt = select(*model_attributes_to_select).filter(ForestArea.layer_id == layer_id)
-
     result = await db_session.execute(stmt)
     rows = result.all()
 
-    forest_areas_list: List[ForestArea] = []
-
+    forest_areas_list: list[ForestArea] = []
     attribute_keys = [attr.key for attr in model_attributes_to_select]
 
     for row_data in rows:
         area = ForestArea()
         for i, key in enumerate(attribute_keys):
             setattr(area, key, row_data[i])
-
         forest_areas_list.append(area)
 
     return forest_areas_list
