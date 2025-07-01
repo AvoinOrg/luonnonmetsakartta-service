@@ -363,6 +363,14 @@ async def create_geoserver_centroid_layer(
                 "attribute": [
                     {"name": "id", "binding": "java.lang.String"},
                     {"name": "name", "binding": "java.lang.String"},
+                    {"name": "created_ts", "binding": "java.sql.Timestamp"},
+                    {"name": "updated_ts", "binding": "java.sql.Timestamp"},
+                    {"name": "description", "binding": "java.lang.String"},
+                    {"name": "pictures", "binding": "java.lang.String"},
+                    {"name": "municipality", "binding": "java.lang.String"},
+                    {"name": "region", "binding": "java.lang.String"},
+                    {"name": "area_ha", "binding": "java.lang.Double"},
+                    {"name": "date", "binding": "java.lang.String"},
                     {"name": "geometry", "binding": "org.locationtech.jts.geom.Point"},
                 ]
             },
