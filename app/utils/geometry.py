@@ -214,6 +214,29 @@ async def import_shapefile_to_layer(
         )
         await db_session.execute(statement=create_index_sql)
 
+        # Create attribute indexes based on indexing strategy
+        strategy = col_options.indexing_strategy
+        if strategy == "name_municipality":
+            index_name_attr: str = f"idx_forest_area_name_municipality_layer_{layer.id.hex}"[:63]
+            create_attr_index_sql: TextClause = text(
+                f"""
+                CREATE UNIQUE INDEX {index_name_attr}
+                ON forest_area (name, municipality)
+                WHERE layer_id = '{layer.id}';
+                """
+            )
+            await db_session.execute(statement=create_attr_index_sql)
+        elif strategy == "id" and col_options.id_col:
+            index_name_attr: str = f"idx_forest_area_original_id_layer_{layer.id.hex}"[:63]
+            create_attr_index_sql: TextClause = text(
+                f"""
+                CREATE INDEX {index_name_attr}
+                ON forest_area (original_id)
+                WHERE layer_id = '{layer.id}';
+                """
+            )
+            await db_session.execute(statement=create_attr_index_sql)
+
         # Process each geometry
         areas = []
         for idx, row in gdf.iterrows():
@@ -243,6 +266,9 @@ async def import_shapefile_to_layer(
                 if col_options.description_col
                 else None
             )
+            original_id_val = (
+                props.pop(col_options.id_col) if col_options.id_col else None
+            )
 
             area = ForestArea(
                 layer_id=layer.id,
@@ -251,6 +277,7 @@ async def import_shapefile_to_layer(
                 municipality=municipality,
                 region=region,
                 area_ha=area_ha,
+                original_id=original_id_val,
                 geometry=from_shape(shape=geom, srid=srid),  # Handle any geometry type
                 original_properties=props,
             )

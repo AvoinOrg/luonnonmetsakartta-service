@@ -78,12 +78,24 @@ async def delete_forest_layer(db_session: AsyncSession, layer: ForestLayer) -> b
         return False
 
     try:
+        # Drop the spatial index
         index_name = get_index_name_for_id(layer.id)
-        # Drop the spatial index for this layer
-        drop_index_sql = text(f"""
-            DROP INDEX IF EXISTS {index_name};
-        """)
+        drop_index_sql = text(f"DROP INDEX IF EXISTS {index_name};")
         await db_session.execute(drop_index_sql)
+
+        # Drop attribute indexes based on indexing strategy
+        col_options = layer.col_options
+        if col_options:
+            strategy = col_options.get("indexing_strategy")
+            layer_uuid = uuid.UUID(layer.id) if isinstance(layer.id, str) else layer.id
+            if strategy == "name_municipality":
+                index_name_attr: str = f"idx_forest_area_name_municipality_layer_{layer_uuid.hex}"[:63]
+                drop_attr_index_sql = text(f"DROP INDEX IF EXISTS {index_name_attr};")
+                await db_session.execute(drop_attr_index_sql)
+            elif strategy == "id":
+                index_name_attr: str = f"idx_forest_area_original_id_layer_{layer_uuid.hex}"[:63]
+                drop_attr_index_sql = text(f"DROP INDEX IF EXISTS {index_name_attr};")
+                await db_session.execute(drop_attr_index_sql)
 
         # Delete the layer
         await db_session.execute(delete(ForestLayer).filter_by(id=layer.id))
@@ -99,14 +111,30 @@ async def delete_forest_layer_by_id(db_session: AsyncSession, id: str) -> bool:
         return False
 
     try:
+        layer = await get_forest_layer_by_id(db_session, id)
+        if not layer:
+            return False  # Or raise an error
+
         await delete_forest_area_by_layer_id(db_session, id)
 
+        # Drop the spatial index
         index_name = get_index_name_for_id(id)
-        # Drop the spatial index for this layer
-        drop_index_sql = text(f"""
-            DROP INDEX IF EXISTS {index_name};
-        """)
+        drop_index_sql = text(f"DROP INDEX IF EXISTS {index_name};")
         await db_session.execute(drop_index_sql)
+
+        # Drop attribute indexes based on indexing strategy
+        col_options = layer.col_options
+        if col_options:
+            strategy = col_options.get("indexing_strategy")
+            layer_uuid = uuid.UUID(id)
+            if strategy == "name_municipality":
+                index_name_attr: str = f"idx_forest_area_name_municipality_layer_{layer_uuid.hex}"[:63]
+                drop_attr_index_sql = text(f"DROP INDEX IF EXISTS {index_name_attr};")
+                await db_session.execute(drop_attr_index_sql)
+            elif strategy == "id":
+                index_name_attr: str = f"idx_forest_area_original_id_layer_{layer_uuid.hex}"[:63]
+                drop_attr_index_sql = text(f"DROP INDEX IF EXISTS {index_name_attr};")
+                await db_session.execute(drop_attr_index_sql)
 
         # Delete the layer
         await db_session.execute(delete(ForestLayer).filter_by(id=id))
