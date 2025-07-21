@@ -109,7 +109,9 @@ async def update_layer_areas(
             region = pop_case_insensitive("maakunta", "Unknown")
             area_ha = pop_case_insensitive("ala_ha", 0)
             owner = pop_case_insensitive("omistus")  # Assuming 'Omistus' might vary
-            person_responsible = pop_case_insensitive("vastuuhkl")  # Assuming 'Omistus' might vary
+            person_responsible = pop_case_insensitive(
+                "vastuuhkl"
+            )  # Assuming 'Omistus' might vary
             date = pop_case_insensitive("paiva")
 
             merged_props = clean_properties(attributes)
@@ -178,6 +180,16 @@ async def import_shapefile_to_layer(
         if gdf is None:
             raise ValueError(f"Failed to read shapefile: {zip_path}")
 
+        # If the specified ID column is the index, reset it to be a regular column
+        if (
+            col_options.id_col
+            and col_options.id_col not in gdf.columns
+            and gdf.index.name
+            and isinstance(gdf.index.name, str)
+            and col_options.id_col.lower() == gdf.index.name.lower()
+        ):
+            gdf = gdf.reset_index()
+
         # Create new layer
         layer = ForestLayer(
             name=layer_name,
@@ -186,14 +198,14 @@ async def import_shapefile_to_layer(
             color_code=color_code,
             col_options=col_options.model_dump(),
             original_properties={
-                "crs": str(object=gdf.crs),
+                "crs": str(object=gdf.crs) if gdf.crs else None,
                 "columns": list(gdf.columns),
             },
         )
 
         gdf = gdf.to_crs(epsg=3067)
 
-        srid = gdf.crs.to_epsg()
+        srid = gdf.crs.to_epsg() if gdf.crs else None
         if not srid:
             raise ValueError(f"Could not extract EPSG code from CRS: {gdf.crs}")
 
@@ -244,7 +256,9 @@ async def import_shapefile_to_layer(
             props = row.to_dict()
             props.pop("geometry", None)
 
-            name = fix_encoding(props.pop(col_options.name_col, f"Area {idx + 1}"))
+            name = fix_encoding(
+                props.pop(col_options.name_col, f"Area {str(idx)}")
+            )
             municipality = fix_encoding(
                 props.pop(col_options.municipality_col, "Unknown")
             )
@@ -253,22 +267,24 @@ async def import_shapefile_to_layer(
                 if col_options.region_col
                 else "Unknown"
             )
-            
+
             area_ha = None
             if col_options.area_col:
                 area_ha = props.pop(col_options.area_col, None)
 
             if area_ha is None:
                 area_ha = geom.area / 10000
-            
+
             description_val = (
-                fix_encoding(props.pop(col_options.description_col))
+                fix_encoding(props.pop(col_options.description_col, None))
                 if col_options.description_col
                 else None
             )
-            original_id_val = (
-                props.pop(col_options.id_col) if col_options.id_col else None
-            )
+            original_id_val = None
+            if col_options.id_col:
+                id_val = props.pop(col_options.id_col, None)
+                if id_val is not None:
+                    original_id_val = str(id_val)
 
             area = ForestArea(
                 layer_id=layer.id,
