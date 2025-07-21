@@ -6,6 +6,7 @@ from uuid import uuid4
 from typing import Optional
 
 from app.db.models.base import Base
+from app.types.general import ColOptions
 
 
 # GOTCHA: If you add / remove columns, remember to update the queries that specify each column explicitly
@@ -17,7 +18,7 @@ class ForestLayer(Base):
         default=uuid4,
         server_default=text("gen_random_uuid()"),
     )
-    # shapefile_id_col: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    # shapefile_id_col: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_ts: Mapped[datetime] = mapped_column(
         TIMESTAMP(timezone=True),
         server_default=text("current_timestamp(0)"),
@@ -27,8 +28,10 @@ class ForestLayer(Base):
         server_default=text("current_timestamp(0)"),
     )
     is_hidden: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    col_options: Mapped[dict] = mapped_column(JSONB, nullable=False)
     name: Mapped[str] = mapped_column(Text, nullable=False)
-    color_code: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
-    symbol: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
-    description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    color_code: Mapped[str | None] = mapped_column(Text, nullable=True)
+    symbol: Mapped[str | None] = mapped_column(Text, nullable=True)
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    original_id: Mapped[str | None] = mapped_column(Text, nullable=True)
     original_properties: Mapped[Optional[dict]] = mapped_column(JSONB, nullable=True)
