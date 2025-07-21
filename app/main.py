@@ -3,7 +3,7 @@ from datetime import datetime, timezone
 import json
 import shutil
 import tempfile
-from typing import Any
+from typing import Any, Literal
 from fastapi import Depends, UploadFile, File, Form, HTTPException
 from uuid import UUID
 
@@ -39,6 +39,7 @@ from app.db.forest_area import (
     get_forest_areas_by_layer_id,
     update_forest_area,
 )
+from app.types.general import ColOptions, IndexingStrategy
 
 logger = get_logger(__name__)
 global_settings = config.get_settings()
@@ -82,10 +83,17 @@ class LayerResponse(LayerResponsePublic):
 @app.post(path="/layer")
 async def create_layer(
     name: str = Form(...),
-    description: str = Form(None),
+    description: str | None = Form(None),
     is_hidden: bool = Form(True),
     color_code: str = Form(default="#0000FF"),
     zip_file: UploadFile = File(...),
+    indexing_strategy: str = Form(...),
+    id_col: str | None = Form(None),
+    name_col: str = Form(...),
+    municipality_col: str = Form(...),
+    region_col: str | None = Form(None),
+    description_col: str | None = Form(None),
+    area_col: str | None = Form(None),
     editor_status: dict = Depends(get_editor_status),
 ):
     # Create temporary directory
@@ -99,6 +107,30 @@ async def create_layer(
             status_code=400, detail=f"Missing filename in main .shp file"
         )
 
+    if indexing_strategy not in ["name_municipality", "id"]:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid indexing strategy: {indexing_strategy}. Must be 'name_municipality' or 'id'.",
+        )
+
+    try:
+        indexing_strategy_val: IndexingStrategy = indexing_strategy  # type: ignore
+    except ValueError:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid indexing strategy: {indexing_strategy}. Must be 'name_municipality' or 'id'.",
+        )
+
+    col_options = ColOptions(
+        indexingStrategy=indexing_strategy_val,
+        idCol=id_col,
+        nameCol=name_col,
+        municipalityCol=municipality_col,
+        regionCol=region_col,
+        descriptionCol=description_col,
+        areaCol=area_col,
+    )
+
     layer_id = None
     try:
         with tempfile.NamedTemporaryFile(suffix=".zip") as temp_file:
@@ -110,6 +142,7 @@ async def create_layer(
                     session,
                     temp_file.name,
                     name,
+                    col_options,
                     color_code=color_code,
                     description=description,
                     is_hidden=is_hidden,
@@ -402,7 +435,9 @@ async def get_areas_for_layer(
                 )
 
             # Get all areas for this layer
-            areas = await get_forest_areas_centroids_by_layer_id(session, layer_id, target_srid=4326)
+            areas = await get_forest_areas_centroids_by_layer_id(
+                session, layer_id, target_srid=4326
+            )
 
             # Convert to GeoJSON features
             features = []

@@ -11,6 +11,7 @@ from app.db.forest_layer import get_index_name_for_id
 from app.db.models.forest_area import ForestArea
 from app.db.models.forest_layer import ForestLayer
 from app.utils.general import fix_encoding
+from app.types.general import ColOptions
 
 from app.utils.logger import get_logger
 
@@ -157,6 +158,7 @@ async def import_shapefile_to_layer(
     db_session: AsyncSession,
     zip_path: str,
     layer_name: str,
+    col_options: ColOptions,
     color_code: str,
     description: str | None = None,
     is_hidden: bool = True,
@@ -182,6 +184,7 @@ async def import_shapefile_to_layer(
             description=description,
             is_hidden=is_hidden,
             color_code=color_code,
+            col_options=col_options.model_dump(),
             original_properties={
                 "crs": str(object=gdf.crs),
                 "columns": list(gdf.columns),
@@ -218,19 +221,36 @@ async def import_shapefile_to_layer(
             props = row.to_dict()
             props.pop("geometry", None)
 
-            name = fix_encoding(props.pop("nimi", f"Area {idx + 1}"))
-            municipality = fix_encoding(props.pop("kunta", "Unknown"))
-            region = fix_encoding(props.pop("maakunta", "Unknown"))
-            area_ha = props.pop("ala_ha", 0)
-            date = props.pop("paiva", None)
+            name = fix_encoding(props.pop(col_options.name_col, f"Area {idx + 1}"))
+            municipality = fix_encoding(
+                props.pop(col_options.municipality_col, "Unknown")
+            )
+            region = (
+                fix_encoding(props.pop(col_options.region_col, "Unknown"))
+                if col_options.region_col
+                else "Unknown"
+            )
+            
+            area_ha = None
+            if col_options.area_col:
+                area_ha = props.pop(col_options.area_col, None)
+
+            if area_ha is None:
+                area_ha = geom.area / 10000
+            
+            description_val = (
+                fix_encoding(props.pop(col_options.description_col))
+                if col_options.description_col
+                else None
+            )
 
             area = ForestArea(
                 layer_id=layer.id,
                 name=name,
+                description=description_val,
                 municipality=municipality,
                 region=region,
                 area_ha=area_ha,
-                date=date,
                 geometry=from_shape(shape=geom, srid=srid),  # Handle any geometry type
                 original_properties=props,
             )
