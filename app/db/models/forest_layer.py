@@ -3,7 +3,6 @@ from sqlalchemy import Boolean, Text, text
 from sqlalchemy.dialects.postgresql import UUID, JSONB, TIMESTAMP
 from sqlalchemy.orm import Mapped, mapped_column
 from uuid import uuid4
-from typing import Optional
 
 from app.db.models.base import Base
 from app.types.general import ColOptions
@@ -33,5 +32,4 @@ class ForestLayer(Base):
     color_code: Mapped[str | None] = mapped_column(Text, nullable=True)
     symbol: Mapped[str | None] = mapped_column(Text, nullable=True)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
-    original_id: Mapped[str | None] = mapped_column(Text, nullable=True)
-    original_properties: Mapped[Optional[dict]] = mapped_column(JSONB, nullable=True)
+    original_properties: Mapped[dict | None] = mapped_column(JSONB, nullable=True)

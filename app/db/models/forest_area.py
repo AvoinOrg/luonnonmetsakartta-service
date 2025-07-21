@@ -46,4 +46,5 @@ class ForestArea(Base):
         Computed("ST_Centroid(geometry) STORED", persisted=True),
         nullable=True,
     )
+    original_id: Mapped[str | None] = mapped_column(Text, nullable=True)
     original_properties: Mapped[Optional[dict]] = mapped_column(JSONB, nullable=True)
