@@ -605,7 +605,12 @@ async def layer_with_feature_for_update(
         "name": "Layer For Feature Update Test",
         "description": "A layer to test feature updates",
         "is_hidden": False,
+        "indexing_strategy": "id",
+        "id_col": "id",
+        "name_col": "nimi",
+        "municipality_col": "kunta",
     }
+    
     response = await client.post(
         "/layer", files=files, data=layer_data, headers=auth_headers
     )
