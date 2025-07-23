@@ -1,7 +1,7 @@
 import json
+import httpx
 from typing import Optional
 from sqlalchemy.sql import text
-import httpx
 from uuid import UUID
 from app.config import get_settings
 from app.db import connection
@@ -663,9 +663,79 @@ async def _set_single_layer_visibility(
             return True
         else:
             logger.error(
-                f"Failed to update layer visibility for {layer_name}: {response.text}"
+                f"Failed to set visibility for layer {layer_name}. Status: {response.status_code}, Response: {response.text}"
             )
             return False
+
+
+async def invalidate_geoserver_cache_by_bbox(
+    layer_id_uuid: UUID,
+    bounds_3067: tuple[float, float, float, float],
+):
+    """
+    Invalidates GeoServer GWC tile cache for a given bounding box.
+    It transforms the bbox to EPSG:3857 and clears tiles for EPSG:900913 gridset.
+    """
+    logger.info(
+        f"Attempting to invalidate GeoServer cache for layer {layer_id_uuid} using bbox {bounds_3067}"
+    )
+
+    bounds_3857 = None
+
+    # Transform bounding box from EPSG:3067 to EPSG:3857
+    async with connection.get_async_context_db() as session:
+        stmt = text(
+            """
+            SELECT
+                ST_XMin(ST_Transform(ST_MakeEnvelope(:minx, :miny, :maxx, :maxy, 3067), 3857)) as minx_3857,
+                ST_YMin(ST_Transform(ST_MakeEnvelope(:minx, :miny, :maxx, :maxy, 3067), 3857)) as miny_3857,
+                ST_XMax(ST_Transform(ST_MakeEnvelope(:minx, :miny, :maxx, :maxy, 3067), 3857)) as maxx_3857,
+                ST_YMax(ST_Transform(ST_MakeEnvelope(:minx, :miny, :maxx, :maxy, 3067), 3857)) as maxy_3857
+            """
+        )
+        result = await session.execute(
+            stmt,
+            {
+                "minx": bounds_3067[0],
+                "miny": bounds_3067[1],
+                "maxx": bounds_3067[2],
+                "maxy": bounds_3067[3],
+            },
+        )
+        bounds_data = result.mappings().first()
+
+        if bounds_data and not any(bounds_data[k] is None for k in bounds_data.keys()):
+            bounds_3857 = (
+                bounds_data["minx_3857"],
+                bounds_data["miny_3857"],
+                bounds_data["maxx_3857"],
+                bounds_data["maxy_3857"],
+            )
+
+    if not bounds_3857:
+        logger.warning(
+            f"Could not transform bounds for layer {layer_id_uuid}. Skipping GeoServer cache invalidation."
+        )
+        return
+
+    area_layer_raw_name = get_layer_name_for_id(layer_id_uuid)
+    centroid_layer_raw_name = get_layer_centroid_name_for_id(layer_id_uuid)
+    tile_format = "application/vnd.mapbox-vector-tile"
+    gridset_id = "EPSG:900913"
+    srs_code = 3857
+
+    for layer_raw_name in [area_layer_raw_name, centroid_layer_raw_name]:
+        logger.info(
+            f"Requesting GWC truncation for layer {geoserver_workspace}:{layer_raw_name}, "
+            f"gridset {gridset_id}, bounds (SRS {srs_code}): {bounds_3857}"
+        )
+        await _truncate_gwc_tiles_for_gridset(
+            raw_layer_name=layer_raw_name,
+            bounds_coords=bounds_3857,
+            bounds_srs_code=srs_code,
+            gridset_id_to_truncate=gridset_id,
+            tile_format=tile_format,
+        )
 
 
 async def _truncate_gwc_tiles_for_gridset(
@@ -756,22 +826,19 @@ async def invalidate_geoserver_cache_for_feature(
         f"Attempting to invalidate GeoServer cache for feature {feature_id_uuid} in layer {layer_id_uuid}"
     )
 
-    bounds_3857 = None  # For EPSG:900913 (Web Mercator) gridset
+    bounds_3067 = None
 
     async with connection.get_async_context_db() as session:
-        # Fetch feature's bounding box in both EPSG:3067 (native) and EPSG:3857 (Web Mercator)
+        # Fetch feature's bounding box in EPSG:3067
         stmt = text(
             """
-            WITH feature_geom AS (
-                SELECT geometry FROM forest_area WHERE id = :feature_id AND layer_id = :layer_id
-            )
             SELECT
-                ST_XMin(ST_Extent(ST_Transform(geometry, 3857))) as minx_3857,
-                ST_YMin(ST_Extent(ST_Transform(geometry, 3857))) as miny_3857,
-                ST_XMax(ST_Extent(ST_Transform(geometry, 3857))) as maxx_3857,
-                ST_YMax(ST_Extent(ST_Transform(geometry, 3857))) as maxy_3857
-            FROM feature_geom
-            WHERE geometry IS NOT NULL;
+                ST_XMin(geometry) as minx,
+                ST_YMin(geometry) as miny,
+                ST_XMax(geometry) as maxx,
+                ST_YMax(geometry) as maxy
+            FROM forest_area
+            WHERE id = :feature_id AND layer_id = :layer_id AND geometry IS NOT NULL;
             """
         )
         result = await session.execute(
@@ -779,68 +846,21 @@ async def invalidate_geoserver_cache_for_feature(
         )
         bounds_data = result.mappings().first()
 
-        if not bounds_data:
-            logger.warning(
-                f"Feature {feature_id_uuid} in layer {layer_id_uuid} not found or has no geometry. "
-                "Skipping GeoServer cache invalidation."
-            )
-            return
-
-        # Check and assign bounds for EPSG:3857
-        if not any(
-            bounds_data[k] is None
-            for k in ["minx_3857", "miny_3857", "maxx_3857", "maxy_3857"]
-        ):
-            bounds_3857 = (
-                bounds_data["minx_3857"],
-                bounds_data["miny_3857"],
-                bounds_data["maxx_3857"],
-                bounds_data["maxy_3857"],
+        if bounds_data and not any(bounds_data[k] is None for k in bounds_data.keys()):
+            bounds_3067 = (
+                bounds_data["minx"],
+                bounds_data["miny"],
+                bounds_data["maxx"],
+                bounds_data["maxy"],
             )
 
-    if not bounds_3857:
+    if not bounds_3067:
         logger.warning(
             f"Could not determine valid bounds for feature {feature_id_uuid}. Skipping GeoServer cache invalidation."
         )
         return
 
-    area_layer_raw_name = get_layer_name_for_id(layer_id_uuid)
-    centroid_layer_raw_name = get_layer_centroid_name_for_id(layer_id_uuid)
-
-    tile_format = (
-        "application/vnd.mapbox-vector-tile"  # Common tile format; adjust if different
-    )
-
-    # Define gridsets to attempt truncation for.
-    # The gridset_id must match what's configured in GWC.
-    # (bounds_for_this_gridset, srs_code_of_bounds)
-    gridset_configs = {
-        # Remove EPSG:3067 as it is not supported
-        "EPSG:900913": (bounds_3857, 3857),  # For Web Mercator tiles (common for TMS)
-    }
-
-    layers_to_invalidate_raw_names = [area_layer_raw_name, centroid_layer_raw_name]
-
-    for layer_raw_name in layers_to_invalidate_raw_names:
-        for gridset_id, (bounds, srs_code) in gridset_configs.items():
-            if bounds:  # Only proceed if we have valid bounds for this SRS
-                logger.info(
-                    f"Requesting GWC truncation for layer {geoserver_workspace}:{layer_raw_name}, "
-                    f"gridset {gridset_id}, bounds (SRS {srs_code}): {bounds}"
-                    f"gridset {gridset_id}, bounds (SRS {srs_code}): {bounds}"
-                )
-                await _truncate_gwc_tiles_for_gridset(
-                    raw_layer_name=layer_raw_name,
-                    bounds_coords=bounds,
-                    bounds_srs_code=srs_code,
-                    gridset_id_to_truncate=gridset_id,
-                    tile_format=tile_format,
-                )
-            else:
-                logger.debug(
-                    f"Skipping GWC truncation for layer {layer_raw_name}, gridset {gridset_id} "
-                    f"due to missing/invalid bounds for its SRS {srs_code}."
-                )
+    await invalidate_geoserver_cache_by_bbox(layer_id_uuid, bounds_3067)
 
 
 async def invalidate_geoserver_cache_for_features(
@@ -854,24 +874,19 @@ async def invalidate_geoserver_cache_for_features(
         f"Attempting to invalidate GeoServer cache for features {feature_ids} in layer {layer_id_uuid}"
     )
 
-    bounds_3857 = None  # For EPSG:900913 (Web Mercator) gridset
+    bounds_3067 = None
 
     async with connection.get_async_context_db() as session:
-        # Fetch the combined bounding box for all features in EPSG:3857
+        # Fetch the combined bounding box for all features in EPSG:3067
         stmt = text(
             """
-            WITH feature_geoms AS (
-                SELECT ST_Transform(geometry, 3857) AS geom
-                FROM forest_area
-                WHERE id = ANY(:feature_ids) AND layer_id = :layer_id
-            )
             SELECT
-                ST_XMin(ST_Extent(geom)) as minx,
-                ST_YMin(ST_Extent(geom)) as miny,
-                ST_XMax(ST_Extent(geom)) as maxx,
-                ST_YMax(ST_Extent(geom)) as maxy
-            FROM feature_geoms
-            WHERE geom IS NOT NULL;
+                ST_XMin(ST_Extent(geometry)) as minx,
+                ST_YMin(ST_Extent(geometry)) as miny,
+                ST_XMax(ST_Extent(geometry)) as maxx,
+                ST_YMax(ST_Extent(geometry)) as maxy
+            FROM forest_area
+            WHERE id = ANY(:feature_ids) AND layer_id = :layer_id AND geometry IS NOT NULL;
             """
         )
         result = await session.execute(
@@ -883,38 +898,18 @@ async def invalidate_geoserver_cache_for_features(
         )
         bounds_data = result.mappings().first()
 
-        if not bounds_data or any(
-            bounds_data[k] is None for k in ["minx", "miny", "maxx", "maxy"]
-        ):
-            logger.warning(
-                f"Could not determine valid bounds for features {feature_ids}. Skipping GeoServer cache invalidation."
+        if bounds_data and not any(bounds_data[k] is None for k in bounds_data.keys()):
+            bounds_3067 = (
+                bounds_data["minx"],
+                bounds_data["miny"],
+                bounds_data["maxx"],
+                bounds_data["maxy"],
             )
-            return
 
-        bounds_3857 = (
-            bounds_data["minx"],
-            bounds_data["miny"],
-            bounds_data["maxx"],
-            bounds_data["maxy"],
-        )
-
-    if not bounds_3857:
+    if not bounds_3067:
         logger.warning(
-            f"Could not determine valid bounds for features {feature_ids}. Skipping GeoServer cache invalidation."
+            f"Could not determine combined bounds for features in layer {layer_id_uuid}. Skipping cache invalidation."
         )
         return
 
-    area_layer_raw_name = get_layer_name_for_id(layer_id_uuid)
-    tile_format = "application/vnd.mapbox-vector-tile"  # Common tile format
-
-    logger.info(
-        f"Requesting GWC truncation for layer {geoserver_workspace}:{area_layer_raw_name}, "
-        f"gridset EPSG:900913, bounds (SRS 3857): {bounds_3857}"
-    )
-    await _truncate_gwc_tiles_for_gridset(
-        raw_layer_name=area_layer_raw_name,
-        bounds_coords=bounds_3857,
-        bounds_srs_code=3857,
-        gridset_id_to_truncate="EPSG:900913",
-        tile_format=tile_format,
-    )
+    await invalidate_geoserver_cache_by_bbox(layer_id_uuid, bounds_3067)
