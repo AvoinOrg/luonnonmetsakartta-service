@@ -179,6 +179,12 @@ async def test_create_layer_no_permissions(
     data = {
         "name": "Test Layer",
         "description": "Test Description",
+        "indexing_strategy": "id",
+        "id_col": "id",
+        "name_col": "nimi",
+        "municipality_col": "kunta",
+        "area_col": "area_ha",
+        "region_col": "maakunta",
     }
 
     response = await client.post(
@@ -199,6 +205,12 @@ async def test_create_layer_invalid_file(
 
     data = {
         "name": "Test Layer",
+        "indexing_strategy": "id",
+        "id_col": "id",
+        "name_col": "nimi",
+        "municipality_col": "kunta",
+        "area_col": "area_ha",
+        "region_col": "maakunta",
     }
 
     response = await client.post("/layer", files=files, data=data, headers=auth_headers)

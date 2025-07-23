@@ -141,32 +141,21 @@ async def test_create_layer_success(
     layer_id = None
 
     try:
-        files = [
-            (
-                "zip_file",
-                ("test.zip", mock_shapefile, "application/zip"),
-            )
-        ]
-
+        files = [("zip_file", ("test.zip", mock_shapefile, "application/zip"))]
         data = {
             "name": "Test Layer",
             "description": "Test Description",
             "is_hidden": False,
+            "indexing_strategy": "id",
+            "id_col": "id",
+            "name_col": "nimi",
+            "municipality_col": "kunta",
         }
-
         response = await client.post(
             "/layer", files=files, data=data, headers=auth_headers
         )
-
         assert response.status_code == 200
-        result = response.json()
-        assert result["name"] == data["name"]
-        assert result["description"] == data["description"]
-        assert result["is_hidden"] is not None and not result["is_hidden"]
-        assert "id" in result
-
-        if "id" in result:
-            layer_id = result["id"]
+        layer_id = response.json()["id"]
 
         response = await client.get(f"/layer/{layer_id}", headers=auth_headers)
         assert response.status_code == 200
@@ -189,31 +178,59 @@ async def test_import_real_shapefile_success(
 ):
     layer_id = None
     try:
-        files = [
-            (
-                "zip_file",
-                ("test_data.zip", real_shapefile, "application/zip"),
-            )
-        ]
-
+        files = [("zip_file", ("test.zip", real_shapefile, "application/zip"))]
         data = {
-            "name": "Natural Forests",
-            "description": "Imported natural forest areas",
+            "name": "Real Test Layer",
+            "description": "Test Description for real shapefile",
+            "indexing_strategy": "id",
+            "id_col": "id",
+            "name_col": "nimi",
+            "municipality_col": "kunta",
         }
-
         response = await client.post(
             "/layer", files=files, data=data, headers=auth_headers
         )
+        assert response.status_code == 200
+        layer_id = response.json()["id"]
 
+        response = await client.get(f"/layer/{layer_id}", headers=auth_headers)
         assert response.status_code == 200
         result = response.json()
         assert result["name"] == data["name"]
         assert result["description"] == data["description"]
         assert result["is_hidden"] is not None and result["is_hidden"]
-        assert "id" in result
+        assert result["id"] == layer_id
 
-        if "id" in result:
-            layer_id = result["id"]
+    finally:
+        if layer_id:
+            response = await client.delete(f"/layer/{layer_id}", headers=auth_headers)
+            assert response.status_code == 200
+
+
+@pytest.mark.order(order_num + 1)
+@pytest.mark.asyncio
+async def test_import_real_shapefile_success_2(
+    client, real_shapefile, auth_headers, prod_monkeypatch_get_async_context_db
+):
+    layer_id = None
+    try:
+        files = [("zip_file", ("test.zip", real_shapefile, "application/zip"))]
+        data = {
+            "name": "Real Test Layer",
+            "description": "Test Description for real shapefile",
+            "indexing_strategy": "id",
+            "id_col": "id",
+            "name_col": "nimi",
+            "municipality_col": "kunta",
+            "region_col": "maakunta",
+            "description_col": "nimi",
+            "area_col": "ala_ha",
+        }
+        response = await client.post(
+            "/layer", files=files, data=data, headers=auth_headers
+        )
+        assert response.status_code == 200
+        layer_id = response.json()["id"]
 
         response = await client.get(f"/layer/{layer_id}", headers=auth_headers)
         assert response.status_code == 200
@@ -241,7 +258,14 @@ async def test_layers(
     response1 = await client.post(
         "/layer",
         files=files,
-        data={"name": "Test Layer 1", "description": "First test layer"},
+        data={
+            "name": "Test Layer 1",
+            "description": "First test layer",
+            "indexing_strategy": "id",
+            "id_col": "id",
+            "name_col": "nimi",
+            "municipality_col": "kunta",
+        },
         headers=auth_headers,
     )
     assert response1.status_code == 200
@@ -255,6 +279,10 @@ async def test_layers(
             "name": "Test Layer 2",
             "description": "Second test layer",
             "is_hidden": False,
+            "indexing_strategy": "id",
+            "id_col": "id",
+            "name_col": "nimi",
+            "municipality_col": "kunta",
         },
         headers=auth_headers,
     )
@@ -383,6 +411,10 @@ async def test_layer_for_update(
             "name": "Test Layer 1",
             "description": "First test layer",
             "is_hidden": True,
+            "indexing_strategy": "id",
+            "id_col": "id",
+            "name_col": "nimi",
+            "municipality_col": "kunta",
         },
         headers=auth_headers,
     )
