@@ -271,6 +271,8 @@ async def import_shapefile_to_layer(
             area_ha = None
             if col_options.area_col:
                 area_ha = props.pop(col_options.area_col, None)
+                if area_ha is not None and isinstance(area_ha, float) and isnan(area_ha):
+                    area_ha = None
 
             if area_ha is None:
                 area_ha = geom.area / 10000
@@ -286,6 +288,8 @@ async def import_shapefile_to_layer(
                 if id_val is not None:
                     original_id_val = str(id_val)
 
+            cleaned_props = clean_properties(props)
+
             area = ForestArea(
                 layer_id=layer.id,
                 name=name,
@@ -295,7 +299,7 @@ async def import_shapefile_to_layer(
                 area_ha=area_ha,
                 original_id=original_id_val,
                 geometry=from_shape(shape=geom, srid=srid),  # Handle any geometry type
-                original_properties=props,
+                original_properties=cleaned_props,
             )
             areas.append(area)
 
