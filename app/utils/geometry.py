@@ -1,10 +1,12 @@
 from math import isnan
+from uuid import UUID
 import geopandas as gpd
 import numpy as np
-from shapely.ops import transform
+from shapely.ops import transform, unary_union
 from shapely.geometry import Polygon, MultiPolygon
-from geoalchemy2.shape import from_shape
-from sqlalchemy import TextClause, select, text
+from geoalchemy2.shape import from_shape, to_shape
+from geoalchemy2.elements import WKBElement
+from sqlalchemy import TextClause, select, text, cast
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.forest_area import (
@@ -42,7 +44,7 @@ async def update_layer_areas(
     col_options: ColOptions,
     zip_path: str | None = None,
     delete_areas_not_updated: bool = False,
-) -> None:
+) -> tuple[float, float, float, float] | None:
     """
     Read a shapefile (zip) and either update or insert ForestArea rows for the given forest layer.
     - The matching logic depends on the layer's indexing_strategy.
@@ -50,6 +52,9 @@ async def update_layer_areas(
     - New records are inserted.
     - If delete_areas_not_updated is True, any existing areas in the layer that are not
       found in the shapefile will be deleted.
+    Returns:
+        A bounding box tuple (minx, miny, maxx, maxy) in EPSG:3067 for the area encompassing
+        all changed (created, updated, deleted) features, or None if no changes were made.
     """
     # Verify the layer exists
     layer = await get_forest_layer_by_id(db_session, layer_id)
@@ -57,8 +62,9 @@ async def update_layer_areas(
         raise ValueError(f"Layer {layer_id} not found or is missing column options.")
 
     if not zip_path:
-        return
+        return None
 
+    geometries_to_invalidate = []
     try:
         gdf = gpd.read_file(zip_path)
         if gdf is None:
@@ -152,29 +158,45 @@ async def update_layer_areas(
                     existing_area.original_properties = cleaned_props
 
                 processed_area_ids.add(existing_area.id)
+                geometries_to_invalidate.append(geom)
             else:
                 # Create new area
                 new_area = ForestArea(
                     layer_id=layer_id,
                     name=name or f"Area {idx}",
                     description=description_val,
-                    municipality=municipality or "Unknown",
-                    region=region or "Unknown",
+                    municipality=municipality,
+                    region=region or None,
                     area_ha=area_ha,
                     original_id=original_id,
                     geometry=from_shape(geom, srid=srid),
                     original_properties=cleaned_props,
                 )
                 db_session.add(new_area)
+                geometries_to_invalidate.append(geom)
 
         if delete_areas_not_updated:
             id_to_area_map = {area.id: area for area in existing_areas}
             all_existing_ids = set(id_to_area_map.keys())
             ids_to_delete = all_existing_ids - processed_area_ids
             for area_id in ids_to_delete:
-                await db_session.delete(id_to_area_map[area_id])
+                area_to_delete = id_to_area_map[area_id]
+                # The geometry attribute on a model instance is a WKBElement.
+                # Cast to ensure type checker understands the conversion.
+                geom_wkb = cast(WKBElement, area_to_delete.geometry)
+                geometries_to_invalidate.append(to_shape(geom_wkb))
+                await db_session.delete(area_to_delete)
+
+        if not geometries_to_invalidate:
+            await db_session.commit()
+            return None
+
+        # Calculate combined bounding box
+        combined_geom = unary_union(geometries_to_invalidate)
+        bounds = combined_geom.bounds
 
         await db_session.commit()
+        return bounds
 
     except Exception as e:
         logger.error(f"Error updating areas for layer {layer_id}: {e}")
