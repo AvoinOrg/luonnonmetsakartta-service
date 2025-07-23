@@ -316,10 +316,16 @@ async def update_layer(
     name: str | None = Form(None),
     description: str | None = Form(None),
     zip_file: UploadFile | None = File(None),
-    shapefile_id_col: str | None = Form(None),
     is_hidden: bool | None = Form(None),
     color_code: str | None = Form(None),
-    overwrite_existing: bool = Form(False),
+    delete_areas_not_updated: bool = Form(False),
+    # Column mapping options, only used when zip_file is provided
+    id_col: str | None = Form(None),
+    name_col: str | None = Form(None),
+    municipality_col: str | None = Form(None),
+    region_col: str | None = Form(None),
+    description_col: str | None = Form(None),
+    area_col: str | None = Form(None),
     editor_status=Depends(get_editor_status),
 ):
     if not editor_status.get("is_editor"):  # Check if user is editor
@@ -337,19 +343,16 @@ async def update_layer(
                 )
 
             # Update metadata if provided
-            if name:
+            if name is not None:
                 layer.name = name
-            if description:
+            if description is not None:
                 layer.description = description
-            if color_code:
+            if color_code is not None:
                 layer.color_code = color_code
 
             if is_hidden is not None:
-                if layer.is_hidden == is_hidden:
-                    logger.info(f"Layer {layer_id} already has is_hidden={is_hidden}")
-                else:
+                if layer.is_hidden != is_hidden:
                     result = await set_layer_visibility(layer_id, is_hidden=is_hidden)
-
                     if result:
                         layer.is_hidden = is_hidden
                     else:
@@ -358,20 +361,42 @@ async def update_layer(
                             detail=f"Failed to update layer visibility",
                         )
 
-            # if shapefile_id_col is not None:
-            # layer.shapefile_id_col = shapefile_id_col
-
             # Import new areas if shapefile provided
-            if zip_file and zip_file.filename and shapefile_id_col:
+            if zip_file and zip_file.filename:
+                original_col_options_dict = layer.col_options
+                if not original_col_options_dict:
+                    raise HTTPException(
+                        status_code=400,
+                        detail="Cannot update layer with shapefile as it has no column mapping options.",
+                    )
+                original_col_options = ColOptions.model_validate(
+                    original_col_options_dict
+                )
+
+                # For updates, we construct a ColOptions object.
+                # The user can override the columns used for matching.
+                update_col_options = ColOptions(
+                    indexingStrategy=original_col_options.indexing_strategy,
+                    idCol=id_col or original_col_options.id_col,
+                    nameCol=name_col or original_col_options.name_col,
+                    municipalityCol=municipality_col
+                    or original_col_options.municipality_col,
+                    regionCol=region_col or original_col_options.region_col,
+                    descriptionCol=description_col
+                    or original_col_options.description_col,
+                    areaCol=area_col or original_col_options.area_col,
+                )
+
                 with tempfile.NamedTemporaryFile(suffix=".zip") as temp_file:
                     shutil.copyfileobj(zip_file.file, temp_file)
                     temp_file.flush()
 
                     await update_layer_areas(
                         session,
-                        shapefile_id_col,
+                        layer_id=str(layer_id),
                         zip_path=temp_file.name,
-                        overwrite_existing=overwrite_existing,
+                        col_options=update_col_options,
+                        delete_areas_not_updated=delete_areas_not_updated,
                     )
 
             # Update layer in database
