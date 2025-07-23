@@ -30,6 +30,7 @@ from app.db.forest_layer import (
 from app.api.geoserver import (
     create_geoserver_layers,
     delete_geoserver_layer,
+    invalidate_geoserver_cache_by_bbox,
     invalidate_geoserver_cache_for_feature,
     set_layer_visibility,
 )
@@ -391,13 +392,28 @@ async def update_layer(
                     shutil.copyfileobj(zip_file.file, temp_file)
                     temp_file.flush()
 
-                    await update_layer_areas(
+                    invalidation_bounds = await update_layer_areas(
                         session,
                         layer_id=str(layer_id),
                         zip_path=temp_file.name,
                         col_options=update_col_options,
                         delete_areas_not_updated=delete_areas_not_updated,
                     )
+
+                    if invalidation_bounds:
+                        try:
+                            await invalidate_geoserver_cache_by_bbox(
+                                layer_id_uuid=layer_id,
+                                bounds_3067=invalidation_bounds,
+                            )
+                            logger.info(
+                                f"GeoServer GWC cache invalidation request processed for layer {layer_id}"
+                            )
+                        except Exception as e_cache:
+                            # Log error but don't fail the entire request if cache invalidation fails
+                            logger.error(
+                                f"Failed to invalidate GeoServer GWC cache for layer {layer_id}: {e_cache}"
+                            )
 
             # Update layer in database
             updated_layer = await update_forest_layer(session, layer)
