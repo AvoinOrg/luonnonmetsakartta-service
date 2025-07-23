@@ -28,6 +28,32 @@ async def get_forest_area_by_ids(  # New function
     return area if area else None
 
 
+async def get_forest_area_by_original_id_and_layer_id(
+    db_session: AsyncSession, original_id: str, layer_id: str
+) -> Optional[ForestArea]:
+    """
+    Retrieves a specific ForestArea by its original_id and layer_id.
+    """
+    result = await db_session.execute(
+        select(ForestArea).filter_by(original_id=original_id, layer_id=layer_id)
+    )
+    return result.scalars().first()
+
+
+async def get_forest_area_by_name_municipality_and_layer_id(
+    db_session: AsyncSession, name: str, municipality: str, layer_id: str
+) -> Optional[ForestArea]:
+    """
+    Retrieves a specific ForestArea by its name, municipality, and layer_id.
+    """
+    result = await db_session.execute(
+        select(ForestArea).filter_by(
+            name=name, municipality=municipality, layer_id=layer_id
+        )
+    )
+    return result.scalars().first()
+
+
 async def get_all_forest_areas(db_session: AsyncSession) -> List[ForestArea]:
     result = await db_session.execute(select(ForestArea))
     return list(result.scalars().all())
