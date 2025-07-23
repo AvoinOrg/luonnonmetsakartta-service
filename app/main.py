@@ -673,6 +673,7 @@ async def update_feature_in_layer(
             "date": final_area.date,
             "owner": final_area.owner,
             "person_responsible": final_area.person_responsible,
+            "original_id": final_area.original_id,
             "created_ts": (
                 int(final_area.created_ts.timestamp() * 1000)
                 if final_area.created_ts
