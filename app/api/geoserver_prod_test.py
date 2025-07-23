@@ -18,6 +18,7 @@ from app.api.geoserver import (
     get_layer_name_for_id,
     get_layer_centroid_name_for_id,  # Added
     get_layer_permissions,
+    invalidate_geoserver_cache_by_bbox,
     invalidate_geoserver_cache_for_features,
     set_layer_visibility,
     _truncate_gwc_tiles_for_gridset,  # Added
@@ -547,3 +548,39 @@ async def test_invalidate_geoserver_cache_for_features(
 
     except Exception as e:
         pytest.fail(f"invalidate_geoserver_cache_for_features raised an exception: {e}")
+
+
+@pytest.mark.order(
+    after="test_invalidate_geoserver_cache_for_features",
+    before="test_delete_geoserver_layer",
+)
+@pytest.mark.asyncio
+async def test_invalidate_geoserver_cache_by_bounding_box(
+    layer_and_features_for_cache_test, prod_monkeypatch_get_async_context_db
+):
+    """
+    Tests the invalidate_geoserver_cache_by_bbox function.
+    This uses a fixture to set up a layer and multiple features.
+    """
+    layer_id, feature_ids = layer_and_features_for_cache_test
+    logger.info(
+        f"Testing invalidate_geoserver_cache_by_bbox for layer {layer_id}, features {feature_ids}"
+    )
+
+    try:
+        # Test with multiple feature IDs
+        await invalidate_geoserver_cache_by_bbox(
+            layer_id_uuid=layer_id,
+            bounds_3067=(
+                2226389.815865101,
+                8440380.14088389,
+                2338299.6794169014,
+                8464963.0,
+            ),
+        )
+        logger.info(
+            f"invalidate_geoserver_cache_by_bbox executed for layer {layer_id}, features {feature_ids}"
+        )
+
+    except Exception as e:
+        pytest.fail(f"invalidate_geoserver_cache_by_bbox raised an exception: {e}")
