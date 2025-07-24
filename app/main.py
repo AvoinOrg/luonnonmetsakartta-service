@@ -78,6 +78,7 @@ class LayerResponsePublic(BaseModel):
 
 
 class LayerResponse(LayerResponsePublic):
+    col_options: dict
     is_hidden: bool
 
 
@@ -158,6 +159,7 @@ async def create_layer(
                     description=layer.description,
                     is_hidden=layer.is_hidden,
                     color_code=layer.color_code,
+                    col_options=layer.col_options,
                     created_ts=int(layer.created_ts.timestamp() * 1000),
                     updated_ts=int(layer.updated_ts.timestamp() * 1000),
                 )
@@ -249,6 +251,7 @@ async def get_layer(layer_id, editor_status=Depends(get_editor_status_optional))
                     description=layer.description,
                     is_hidden=layer.is_hidden,
                     color_code=layer.color_code,
+                    col_options=layer.col_options,
                     created_ts=int(layer.created_ts.timestamp() * 1000),
                     updated_ts=int(layer.updated_ts.timestamp() * 1000),
                 )
@@ -287,6 +290,7 @@ async def get_layers(editor_status=Depends(get_editor_status_optional)):
                             description=layer.description,
                             is_hidden=layer.is_hidden,
                             color_code=layer.color_code,
+                            col_options=layer.col_options,
                             created_ts=int(layer.created_ts.timestamp() * 1000),
                             updated_ts=int(layer.updated_ts.timestamp() * 1000),
                         )
@@ -423,15 +427,16 @@ async def update_layer(
                     status_code=500, detail=f"Failed to update layer metadata"
                 )
 
-            return {
-                "id": str(updated_layer.id),
-                "name": updated_layer.name,
-                "description": updated_layer.description,
-                "is_hidden": updated_layer.is_hidden,
-                "color_code": updated_layer.color_code,
-                "created_ts": int(layer.created_ts.timestamp() * 1000),
-                "updated_ts": int(layer.updated_ts.timestamp() * 1000),
-            }
+            return LayerResponse(
+                id=str(updated_layer.id),
+                name=updated_layer.name,
+                description=updated_layer.description,
+                color_code=updated_layer.color_code,
+                is_hidden=updated_layer.is_hidden,
+                col_options=updated_layer.col_options,
+                created_ts=int(layer.created_ts.timestamp() * 1000),
+                updated_ts=int(layer.updated_ts.timestamp() * 1000),
+            )
 
     except Exception as e:
         logger.error(e)
@@ -506,6 +511,9 @@ async def get_areas_for_layer(
                     "region": area.region if hasattr(area, "region") else None,
                     "area_ha": float(area.area_ha) if area.area_ha else None,
                     "date": area.date if hasattr(area, "date") else None,
+                    "original_id": (
+                        area.original_id if hasattr(area, "original_id") else None
+                    ),
                     "created_ts": (
                         int(area.created_ts.timestamp() * 1000)
                         if area.created_ts
@@ -714,7 +722,7 @@ async def update_feature_in_layer(
             "date": final_area.date,
             "owner": final_area.owner,
             "person_responsible": final_area.person_responsible,
-            "original_id": final_area.original_id,
+            "original_id": final_area.original_id if final_area.original_id else None,
             "created_ts": (
                 int(final_area.created_ts.timestamp() * 1000)
                 if final_area.created_ts
