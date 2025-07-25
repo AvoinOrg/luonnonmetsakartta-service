@@ -49,7 +49,9 @@ async def cleanup_test_layers(client: httpx.AsyncClient, auth_headers):
         if response.status_code == 200:
             layers = response.json()
             for layer in layers:
-                if "Test Layer" in layer.get("name", "") or "Real Test Layer" in layer.get("name", ""):
+                if "Test Layer" in layer.get(
+                    "name", ""
+                ) or "Real Test Layer" in layer.get("name", ""):
                     logger.info(
                         f"Found leftover test layer to delete: {layer.get('name')} ({layer.get('id')})"
                     )
@@ -692,9 +694,38 @@ async def layer_for_shapefile_update(
         "name_col": "nimi",
         "municipality_col": "kunta",
     }
-    response = await client.post(
-        "/layer", files=files, data=data, headers=auth_headers
-    )
+    response = await client.post("/layer", files=files, data=data, headers=auth_headers)
+    assert response.status_code == 200
+    layer_id = response.json()["id"]
+
+    yield layer_id
+
+    # Cleanup
+    delete_response = await client.delete(f"/layer/{layer_id}", headers=auth_headers)
+    assert delete_response.status_code == 200
+
+
+@pytest.fixture(scope="function")
+async def layer_for_shapefile_update_with_name_municipality_indexing(
+    client: httpx.AsyncClient,
+    real_shapefile,
+    auth_headers,
+    prod_monkeypatch_get_async_context_db,
+):
+    """Create a test layer for shapefile update tests using real data."""
+    files = [("zip_file", ("test.zip", real_shapefile, "application/zip"))]
+    data = {
+        "name": "Test Layer for Shapefile Update",
+        "description": "Initial layer for testing shapefile updates",
+        "is_hidden": False,
+        "indexing_strategy": "name_municipality",
+        "id_col": "id",
+        "name_col": "nimi",
+        "municipality_col": "kunta",
+        "region_col": "maakunta",
+        "area_col": "alue", 
+    }
+    response = await client.post("/layer", files=files, data=data, headers=auth_headers)
     assert response.status_code == 200
     layer_id = response.json()["id"]
 
@@ -741,10 +772,10 @@ async def test_update_layer_with_shapefile_and_delete(
         # IDs to modify and delete
         id_to_update = gdf.iloc[0]["id"]
         ids_to_delete = [gdf.iloc[1]["id"], gdf.iloc[2]["id"]]
-        updated_name = "Updated Name via Shapefile"
+        updated_region = "Updated Region via Shapefile"
 
         # Modify GDF: update one, delete two
-        gdf.loc[gdf["id"] == id_to_update, "nimi"] = updated_name
+        gdf.loc[gdf["id"] == id_to_update, "maakunta"] = updated_region
         gdf = gdf[~gdf["id"].isin(ids_to_delete)]
 
         # Save modified GDF to a new shapefile
@@ -764,7 +795,14 @@ async def test_update_layer_with_shapefile_and_delete(
 
     # Call the update endpoint
     files = [("zip_file", ("modified.zip", updated_zip_content, "application/zip"))]
-    update_data = {"delete_areas_not_updated": True}
+    update_data = {
+        "delete_areas_not_updated": True,
+        "id_col": "id",
+        "name_col": "nimi",
+        "municipality_col": "kunta",
+        "region_col": "maakunta",
+        "area_col": "ala_ha",
+    }
 
     response = await client.patch(
         f"/layer/{layer_id}", files=files, data=update_data, headers=auth_headers
@@ -779,15 +817,109 @@ async def test_update_layer_with_shapefile_and_delete(
     assert len(updated_areas) == original_feature_count - 2
 
     updated_ids = {f["properties"]["original_id"] for f in updated_areas}
-    assert id_to_update in updated_ids
-    assert ids_to_delete[0] not in updated_ids
-    assert ids_to_delete[1] not in updated_ids
+    assert str(id_to_update) in updated_ids
+    assert str(ids_to_delete[0]) not in updated_ids
+    assert str(ids_to_delete[1]) not in updated_ids
 
     # Check if the name was updated
     updated_feature = next(
-        f for f in updated_areas if f["properties"]["original_id"] == id_to_update
+        f for f in updated_areas if f["properties"]["original_id"] == str(id_to_update)
     )
-    assert updated_feature["properties"]["name"] == updated_name
+    print(updated_feature)
+    assert updated_feature["properties"]["region"] == updated_region
+
+
+@pytest.mark.order(order_num + 12)
+@pytest.mark.asyncio
+async def test_update_layer_with_shapefile_with_name_municipality_indexing_and_delete(
+    client: httpx.AsyncClient,
+    layer_for_shapefile_update_with_name_municipality_indexing,
+    real_shapefile,
+    auth_headers,
+    prod_monkeypatch_get_async_context_db,
+):
+    """Test updating a layer with a modified shapefile, deleting features not present in the new file."""
+    layer_id = layer_for_shapefile_update_with_name_municipality_indexing
+
+    # Get original areas to know what to expect
+    response = await client.get(f"/layer/{layer_id}/areas", headers=auth_headers)
+    assert response.status_code == 200
+    original_areas = response.json()["features"]
+    original_feature_count = len(original_areas)
+    assert original_feature_count > 3, "Need at least 4 features for this test"
+
+    # Modify the shapefile data
+    with tempfile.TemporaryDirectory() as temp_dir:
+        temp_dir_path = Path(temp_dir)
+        zip_path = temp_dir_path / "test.zip"
+        with open(zip_path, "wb") as f:
+            f.write(real_shapefile)
+
+        shapefile_dir = temp_dir_path / "unzipped"
+        with zipfile.ZipFile(zip_path, "r") as zip_ref:
+            zip_ref.extractall(shapefile_dir)
+
+        shp_file = next(shapefile_dir.glob("*.shp"))
+        gdf = gpd.read_file(shp_file)
+
+        # IDs to modify and delete
+        id_to_update = gdf.iloc[0]["id"]
+        ids_to_delete = [gdf.iloc[1]["id"], gdf.iloc[2]["id"]]
+        updated_region = "Updated Region via Shapefile"
+
+        # Modify GDF: update one, delete two
+        gdf.loc[gdf["id"] == id_to_update, "maakunta"] = updated_region
+        gdf = gdf[~gdf["id"].isin(ids_to_delete)]
+
+        # Save modified GDF to a new shapefile
+        modified_shp_path = temp_dir_path / "modified.shp"
+        gdf.to_file(modified_shp_path)
+
+        # Create a new zip file with the modified shapefile
+        modified_zip_path = temp_dir_path / "modified.zip"
+        with zipfile.ZipFile(modified_zip_path, "w") as zf:
+            for ext in [".shp", ".shx", ".dbf", ".prj", ".cpg"]:
+                file = modified_shp_path.with_suffix(ext)
+                if file.exists():
+                    zf.write(file, file.name)
+
+        with open(modified_zip_path, "rb") as f:
+            updated_zip_content = f.read()
+
+    # Call the update endpoint
+    files = [("zip_file", ("modified.zip", updated_zip_content, "application/zip"))]
+    update_data = {
+        "delete_areas_not_updated": True,
+        "id_col": "id",
+        "name_col": "nimi",
+        "municipality_col": "kunta",
+        "region_col": "maakunta",
+        "area_col": "ala_ha",
+    }
+
+    response = await client.patch(
+        f"/layer/{layer_id}", files=files, data=update_data, headers=auth_headers
+    )
+    assert response.status_code == 200, f"Update failed: {response.text}"
+
+    # Verify the changes
+    response = await client.get(f"/layer/{layer_id}/areas", headers=auth_headers)
+    assert response.status_code == 200
+    updated_areas = response.json()["features"]
+
+    assert len(updated_areas) == original_feature_count - 2
+
+    updated_ids = {f["properties"]["original_id"] for f in updated_areas}
+    assert str(id_to_update) in updated_ids
+    assert str(ids_to_delete[0]) not in updated_ids
+    assert str(ids_to_delete[1]) not in updated_ids
+
+    # Check if the name was updated
+    updated_feature = next(
+        f for f in updated_areas if f["properties"]["original_id"] == str(id_to_update)
+    )
+
+    assert updated_feature["properties"]["region"] == updated_region
 
 
 @pytest.mark.order(order_num + 13)
@@ -841,7 +973,14 @@ async def test_update_layer_with_shapefile_no_delete(
 
     # Call update endpoint with delete_areas_not_updated=False
     files = [("zip_file", ("modified.zip", updated_zip_content, "application/zip"))]
-    update_data = {"delete_areas_not_updated": False}
+    update_data = {
+        "delete_areas_not_updated": False,
+        "id_col": "id",
+        "name_col": "nimi",
+        "municipality_col": "kunta",
+        "region_col": "maakunta",
+        "area_col": "ala_ha",
+    }
 
     response = await client.patch(
         f"/layer/{layer_id}", files=files, data=update_data, headers=auth_headers
