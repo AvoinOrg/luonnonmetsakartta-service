@@ -3,6 +3,7 @@ from datetime import datetime, timezone
 import json
 import shutil
 import tempfile
+import traceback
 from typing import Any, Literal
 from fastapi import Depends, UploadFile, File, Form, HTTPException
 from uuid import UUID
@@ -166,6 +167,7 @@ async def create_layer(
 
     except Exception as e:
         logger.error(e)
+        logger.error(traceback.format_exc())
 
         # attempt cleanup
         if layer_id:
@@ -224,6 +226,7 @@ async def delete_layer(layer_id: str, editor_status=Depends(get_editor_status)):
         raise he
     except Exception as e:
         logger.error(f"Error deleting layer {layer_id}: {e}")
+        logger.error(traceback.format_exc())
         raise HTTPException(status_code=500, detail=f"Failed to delete layer: {str(e)}")
 
 
@@ -265,8 +268,11 @@ async def get_layer(layer_id, editor_status=Depends(get_editor_status_optional))
                     updated_ts=int(layer.updated_ts.timestamp() * 1000),
                 )
 
+    except HTTPException as he:
+        raise he
     except Exception as e:
         logger.error(e)
+        logger.error(traceback.format_exc())
         raise HTTPException(status_code=500, detail=f"Failed to fetch layers: {str(e)}")
 
 
@@ -309,8 +315,11 @@ async def get_layers(editor_status=Depends(get_editor_status_optional)):
                     )
 
             return return_layers
+    except HTTPException as he:
+        raise he
     except Exception as e:
         logger.error(e)
+        logger.error(traceback.format_exc())
         raise HTTPException(status_code=500, detail=f"Failed to fetch layers: {str(e)}")
 
 
@@ -438,8 +447,11 @@ async def update_layer(
                 updated_ts=int(layer.updated_ts.timestamp() * 1000),
             )
 
+    except HTTPException as he:
+        raise he
     except Exception as e:
         logger.error(e)
+        logger.error(traceback.format_exc())
         raise HTTPException(status_code=500, detail=f"Failed to update layer: {str(e)}")
 
 
@@ -526,9 +538,9 @@ async def get_areas_for_layer(
                     ),
                 }
 
-                # Include original properties if available
-                if hasattr(area, "original_properties") and area.original_properties:
-                    properties.update(area.original_properties)
+                # # Include original properties if available
+                # if hasattr(area, "original_properties") and area.original_properties:
+                #     properties.update(area.original_properties)
 
                 # Include pictures if available
                 if hasattr(area, "pictures") and area.pictures:
@@ -550,6 +562,7 @@ async def get_areas_for_layer(
         raise he
     except Exception as e:
         logger.error(e)
+        logger.error(traceback.format_exc())
         raise HTTPException(
             status_code=500,
             detail=f"Failed to fetch areas for layer {layer_id}: {str(e)}",
@@ -584,171 +597,186 @@ async def update_feature_in_layer(
             status_code=403, detail="User does not have permission to update features"
         )
 
-    async with connection.get_async_context_db() as session:
-        area_to_update = await get_forest_area_by_id(session, str(feature_id))
+    try:
+        async with connection.get_async_context_db() as session:
+            area_to_update = await get_forest_area_by_id(session, str(feature_id))
 
-        if not area_to_update:
-            raise HTTPException(
-                status_code=404, detail=f"Feature with id {feature_id} not found"
-            )
+            if not area_to_update:
+                raise HTTPException(
+                    status_code=404, detail=f"Feature with id {feature_id} not found"
+                )
 
-        if str(area_to_update.layer_id) != str(layer_id):
-            raise HTTPException(
-                status_code=403,
-                detail=f"Feature {feature_id} does not belong to layer {layer_id}",
-            )
+            if str(area_to_update.layer_id) != str(layer_id):
+                raise HTTPException(
+                    status_code=403,
+                    detail=f"Feature {feature_id} does not belong to layer {layer_id}",
+                )
 
-        updated_fields = False
-        if name is not None:
-            area_to_update.name = name
-            updated_fields = True
-        if description is not None:
-            area_to_update.description = description  # Stored as JSON string in JSONB
-            updated_fields = True
-        if pictures_json is not None:
-            try:
-                area_to_update.pictures = json.loads(pictures_json)
+            updated_fields = False
+            if name is not None:
+                area_to_update.name = name
                 updated_fields = True
-            except json.JSONDecodeError:
-                raise HTTPException(
-                    status_code=400, detail="Invalid JSON format for pictures"
+            if description is not None:
+                area_to_update.description = (
+                    description  # Stored as JSON string in JSONB
                 )
-        if municipality is not None:
-            area_to_update.municipality = municipality
-            updated_fields = True
-        if region is not None:
-            area_to_update.region = region
-            updated_fields = True
-        if area_ha is not None:
-            area_to_update.area_ha = area_ha
-            updated_fields = True
-        if date is not None:
-            try:
-                # Convert date to string if it's not already
-                area_to_update.date = str(date)
                 updated_fields = True
-            except Exception as e:
-                raise HTTPException(
-                    status_code=400, detail=f"Invalid format for date: {str(e)}"
-                )
-        if owner is not None:
-            area_to_update.owner = owner
-            updated_fields = True
-        if person_responsible is not None:
-            area_to_update.person_responsible = person_responsible
-            updated_fields = True
-        # if original_properties_json is not None:
-        #     try:
-        #         area_to_update.original_properties = json.loads(
-        #             original_properties_json
-        #         )
-        #         updated_fields = True
-        #     except json.JSONDecodeError:
-        #         raise HTTPException(
-        #             status_code=400,
-        #             detail="Invalid JSON format for original_properties",
-        #         )
+            if pictures_json is not None:
+                try:
+                    area_to_update.pictures = json.loads(pictures_json)
+                    updated_fields = True
+                except json.JSONDecodeError:
+                    raise HTTPException(
+                        status_code=400, detail="Invalid JSON format for pictures"
+                    )
+            if municipality is not None:
+                area_to_update.municipality = municipality
+                updated_fields = True
+            if region is not None:
+                area_to_update.region = region
+                updated_fields = True
+            if area_ha is not None:
+                area_to_update.area_ha = area_ha
+                updated_fields = True
+            if date is not None:
+                try:
+                    # Convert date to string if it's not already
+                    area_to_update.date = str(date)
+                    updated_fields = True
+                except Exception as e:
+                    raise HTTPException(
+                        status_code=400, detail=f"Invalid format for date: {str(e)}"
+                    )
+            if owner is not None:
+                area_to_update.owner = owner
+                updated_fields = True
+            if person_responsible is not None:
+                area_to_update.person_responsible = person_responsible
+                updated_fields = True
+            # if original_properties_json is not None:
+            #     try:
+            #         area_to_update.original_properties = json.loads(
+            #             original_properties_json
+            #         )
+            #         updated_fields = True
+            #     except json.JSONDecodeError:
+            #         raise HTTPException(
+            #             status_code=400,
+            #             detail="Invalid JSON format for original_properties",
+            #         )
 
-        # if geometry_geojson is not None:
-        #     try:
-        #         # Assumes input GeoJSON is EPSG:4326 and transforms to SRID 3067
-        #         # ST_GeomFromGeoJSON expects the GeoJSON string directly.
-        #         new_geometry = func.ST_Transform(
-        #             func.ST_SetSRID(func.ST_GeomFromGeoJSON(geometry_geojson), 4326),
-        #             3067,
-        #         )
-        #         area_to_update.geometry = new_geometry
-        #         updated_fields = True
-        #     except Exception as e:
-        #         logger.error(
-        #             f"Error processing geometry_geojson for feature {feature_id}: {e}"
-        #         )
-        #         raise HTTPException(
-        #             status_code=400,
-        #             detail=f"Invalid GeoJSON format or geometry error: {str(e)}",
-        #         )
+            # if geometry_geojson is not None:
+            #     try:
+            #         # Assumes input GeoJSON is EPSG:4326 and transforms to SRID 3067
+            #         # ST_GeomFromGeoJSON expects the GeoJSON string directly.
+            #         new_geometry = func.ST_Transform(
+            #             func.ST_SetSRID(func.ST_GeomFromGeoJSON(geometry_geojson), 4326),
+            #             3067,
+            #         )
+            #         area_to_update.geometry = new_geometry
+            #         updated_fields = True
+            #     except Exception as e:
+            #         logger.error(
+            #             f"Error processing geometry_geojson for feature {feature_id}: {e}"
+            #         )
+            #         raise HTTPException(
+            #             status_code=400,
+            #             detail=f"Invalid GeoJSON format or geometry error: {str(e)}",
+            #         )
 
-        if updated_fields:
-            area_to_update.updated_ts = datetime.now(timezone.utc)
-            updated_area_db = await update_forest_area(session, area_to_update)
-            if not updated_area_db:
-                # This case should ideally not be hit if update_forest_area raises on SQL error
-                raise HTTPException(
-                    status_code=500, detail="Failed to update feature in database"
-                )
-            try:
-                await invalidate_geoserver_cache_for_feature(
-                    layer_id_uuid=layer_id,  # FastAPI converts path param to UUID
-                    feature_id_uuid=feature_id,  # FastAPI converts path param to UUID
-                )
-                logger.info(
-                    f"GeoServer GWC cache invalidation request processed for feature {feature_id} in layer {layer_id}"
-                )
-            except Exception as e_cache:
-                # Log error but don't fail the entire request if cache invalidation fails
-                logger.error(
-                    f"Failed to invalidate GeoServer GWC cache for feature {feature_id} in layer {layer_id}: {e_cache}"
-                )
-            final_area = updated_area_db
-        else:
-            final_area = area_to_update  # No changes made, return existing
+            if updated_fields:
+                area_to_update.updated_ts = datetime.now(timezone.utc)
+                updated_area_db = await update_forest_area(session, area_to_update)
+                if not updated_area_db:
+                    # This case should ideally not be hit if update_forest_area raises on SQL error
+                    raise HTTPException(
+                        status_code=500, detail="Failed to update feature in database"
+                    )
+                try:
+                    await invalidate_geoserver_cache_for_feature(
+                        layer_id_uuid=layer_id,  # FastAPI converts path param to UUID
+                        feature_id_uuid=feature_id,  # FastAPI converts path param to UUID
+                    )
+                    logger.info(
+                        f"GeoServer GWC cache invalidation request processed for feature {feature_id} in layer {layer_id}"
+                    )
+                except Exception as e_cache:
+                    # Log error but don't fail the entire request if cache invalidation fails
+                    logger.error(
+                        f"Failed to invalidate GeoServer GWC cache for feature {feature_id} in layer {layer_id}: {e_cache}"
+                    )
+                final_area = updated_area_db
+            else:
+                final_area = area_to_update  # No changes made, return existing
 
-        # Construct GeoJSONFeature response using the feature's centroid
-        geometry_for_response_dict = {}
-        # The centroid is computed and should be refreshed by update_forest_area
-        if final_area.centroid is not None:
-            try:
-                shapely_geom = geoalchemy2.shape.to_shape(final_area.centroid)
-                # Note: This geometry is in SRID 3067. GeoJSON typically implies WGS84 (4326).
-                # For consistency with get_areas_for_layer, we don't transform it here.
-                # Clients should be aware of the CRS or it should be specified in the GeoJSON's CRS member if needed.
-                geometry_for_response_dict = shapely_geom.__geo_interface__
-            except Exception as e:
-                logger.error(
-                    f"Error converting centroid to GeoJSON for feature {final_area.id}: {e}"
-                )
-                # Keep geometry_for_response_dict as {}
+            # Construct GeoJSONFeature response using the feature's centroid
+            geometry_for_response_dict = {}
+            # The centroid is computed and should be refreshed by update_forest_area
+            if final_area.centroid is not None:
+                try:
+                    shapely_geom = geoalchemy2.shape.to_shape(final_area.centroid)
+                    # Note: This geometry is in SRID 3067. GeoJSON typically implies WGS84 (4326).
+                    # For consistency with get_areas_for_layer, we don't transform it here.
+                    # Clients should be aware of the CRS or it should be specified in the GeoJSON's CRS member if needed.
+                    geometry_for_response_dict = shapely_geom.__geo_interface__
+                except Exception as e:
+                    logger.error(
+                        f"Error converting centroid to GeoJSON for feature {final_area.id}: {e}"
+                    )
+                    # Keep geometry_for_response_dict as {}
 
-        properties = {
-            "id": str(final_area.id),
-            "layer_id": str(final_area.layer_id),
-            "name": final_area.name,
-            "description": final_area.description,
-            "municipality": final_area.municipality,
-            "region": final_area.region,
-            "area_ha": (
-                float(final_area.area_ha) if final_area.area_ha is not None else None
-            ),
-            "date": final_area.date,
-            "owner": final_area.owner,
-            "person_responsible": final_area.person_responsible,
-            "original_id": final_area.original_id if final_area.original_id else None,
-            "created_ts": (
-                int(final_area.created_ts.timestamp() * 1000)
-                if final_area.created_ts
-                else None
-            ),
-            "updated_ts": (
-                int(final_area.updated_ts.timestamp() * 1000)
-                if final_area.updated_ts
-                else None
-            ),
-        }
-        if final_area.pictures:
-            properties["pictures"] = final_area.pictures
-        if final_area.original_properties:
-            # Ensure original_properties is a dict before updating
-            if isinstance(final_area.original_properties, dict):
-                properties.update(final_area.original_properties)
-            else:  # Log if it's not a dict, though model expects dict
-                logger.warning(
-                    f"Feature {final_area.id} original_properties is not a dict: {type(final_area.original_properties)}"
-                )
+            properties = {
+                "id": str(final_area.id),
+                "layer_id": str(final_area.layer_id),
+                "name": final_area.name,
+                "description": final_area.description,
+                "municipality": final_area.municipality,
+                "region": final_area.region,
+                "area_ha": (
+                    float(final_area.area_ha)
+                    if final_area.area_ha is not None
+                    else None
+                ),
+                "date": final_area.date,
+                "owner": final_area.owner,
+                "person_responsible": final_area.person_responsible,
+                "original_id": (
+                    final_area.original_id if final_area.original_id else None
+                ),
+                "created_ts": (
+                    int(final_area.created_ts.timestamp() * 1000)
+                    if final_area.created_ts
+                    else None
+                ),
+                "updated_ts": (
+                    int(final_area.updated_ts.timestamp() * 1000)
+                    if final_area.updated_ts
+                    else None
+                ),
+            }
+            if final_area.pictures:
+                properties["pictures"] = final_area.pictures
+            if final_area.original_properties:
+                # Ensure original_properties is a dict before updating
+                if isinstance(final_area.original_properties, dict):
+                    properties.update(final_area.original_properties)
+                else:  # Log if it's not a dict, though model expects dict
+                    logger.warning(
+                        f"Feature {final_area.id} original_properties is not a dict: {type(final_area.original_properties)}"
+                    )
 
-        return GeoJSONFeature(
-            id=str(final_area.id),
-            geometry=geometry_for_response_dict,  # Must be a dict
-            properties=properties,
+            return GeoJSONFeature(
+                id=str(final_area.id),
+                geometry=geometry_for_response_dict,  # Must be a dict
+                properties=properties,
+            )
+    except HTTPException as he:
+        raise he
+    except Exception as e:
+        logger.error(f"Error updating feature {feature_id}: {e}")
+        logger.error(traceback.format_exc())
+        raise HTTPException(
+            status_code=500, detail=f"Failed to update feature: {str(e)}"
         )
 
 
