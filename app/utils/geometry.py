@@ -6,8 +6,9 @@ from shapely.ops import transform, unary_union
 from shapely.geometry import Polygon, MultiPolygon
 from geoalchemy2.shape import from_shape, to_shape
 from geoalchemy2.elements import WKBElement
-from sqlalchemy import TextClause, select, text, cast
+from sqlalchemy import TextClause, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
+from typing import cast
 
 from app.db.forest_area import (
     get_forest_areas_by_layer_id,
@@ -92,6 +93,8 @@ async def update_layer_areas(
 
         for idx, row in gdf.iterrows():
             geom = to_2d(row.geometry)
+            if not geom.is_valid:
+                geom = geom.buffer(0)
             props = row.to_dict()
             props.pop("geometry", None)
 
@@ -182,9 +185,12 @@ async def update_layer_areas(
             for area_id in ids_to_delete:
                 area_to_delete = id_to_area_map[area_id]
                 # The geometry attribute on a model instance is a WKBElement.
-                # Cast to ensure type checker understands the conversion.
-                geom_wkb = cast(WKBElement, area_to_delete.geometry)
-                geometries_to_invalidate.append(to_shape(geom_wkb))
+                # We must convert it back to a Shapely geometry to be used for invalidation.
+                # We use typing.cast to inform the type checker of the real runtime type.
+                geom_to_invalidate = to_shape(cast(WKBElement, area_to_delete.geometry))
+                if not geom_to_invalidate.is_valid:
+                    geom_to_invalidate = geom_to_invalidate.buffer(0)
+                geometries_to_invalidate.append(geom_to_invalidate)
                 await db_session.delete(area_to_delete)
 
         if not geometries_to_invalidate:
@@ -307,6 +313,8 @@ async def import_shapefile_to_layer(
         areas = []
         for idx, row in gdf.iterrows():
             geom = to_2d(row.geometry)
+            if not geom.is_valid:
+                geom = geom.buffer(0)
             props = row.to_dict()
             props.pop("geometry", None)
 
