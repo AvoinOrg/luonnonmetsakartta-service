@@ -491,7 +491,7 @@ async def delete_geoserver_layer(forest_layer_id: str | UUID) -> bool:
             logger.error(f"Error dropping database views: {str(e)}")
 
     # Consider the operation successful if at least the main layer was deleted
-    if not area_deleted:
+    if not area_deleted and not centroid_deleted and not permissions_deleted:
         raise Exception(f"Failed to delete main area layer from GeoServer")
 
     return True
