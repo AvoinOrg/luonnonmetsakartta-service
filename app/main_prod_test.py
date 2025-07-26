@@ -838,7 +838,7 @@ async def test_update_layer_with_shapefile_and_delete(
 async def test_update_layer_with_shapefile_with_name_municipality_indexing_and_delete(
     client: httpx.AsyncClient,
     layer_for_shapefile_update_with_name_municipality_indexing,
-    real_shapefile,
+    real_shapefile_unique,
     auth_headers,
     prod_monkeypatch_get_async_context_db,
 ):
@@ -857,7 +857,7 @@ async def test_update_layer_with_shapefile_with_name_municipality_indexing_and_d
         temp_dir_path = Path(temp_dir)
         zip_path = temp_dir_path / "test.zip"
         with open(zip_path, "wb") as f:
-            f.write(real_shapefile)
+            f.write(real_shapefile_unique)
 
         shapefile_dir = temp_dir_path / "unzipped"
         with zipfile.ZipFile(zip_path, "r") as zip_ref:
@@ -999,9 +999,87 @@ async def test_update_layer_with_shapefile_no_delete(
     assert len(updated_areas) == original_feature_count
 
     updated_feature = next(
-        f for f in updated_areas if f["properties"]["original_id"] == id_to_update
+        f for f in updated_areas if f["properties"]["original_id"] == str(id_to_update)
     )
     assert updated_feature["properties"]["name"] == updated_name
+
+
+@pytest.mark.order(order_num + 13)
+@pytest.mark.asyncio
+async def test_update_layer_with_shapefile_with_name_municipality_indexing_no_delete(
+    client: httpx.AsyncClient,
+    layer_for_shapefile_update_with_name_municipality_indexing,
+    real_shapefile_unique,
+    auth_headers,
+    prod_monkeypatch_get_async_context_db,
+):
+    """Test updating a layer with a modified shapefile, without deleting other features."""
+    layer_id = layer_for_shapefile_update_with_name_municipality_indexing
+
+    response = await client.get(f"/layer/{layer_id}/areas", headers=auth_headers)
+    assert response.status_code == 200
+    original_feature_count = len(response.json()["features"])
+
+    # Create a modified shapefile with only one feature
+    with tempfile.TemporaryDirectory() as temp_dir:
+        temp_dir_path = Path(temp_dir)
+        zip_path = temp_dir_path / "test.zip"
+        with open(zip_path, "wb") as f:
+            f.write(real_shapefile_unique)
+
+        shapefile_dir = temp_dir_path / "unzipped"
+        with zipfile.ZipFile(zip_path, "r") as zip_ref:
+            zip_ref.extractall(shapefile_dir)
+
+        shp_file = next(shapefile_dir.glob("*.shp"))
+        gdf = gpd.read_file(shp_file)
+
+        # Keep only one feature and modify it
+        id_to_update = gdf.iloc[0]["id"]
+        updated_region = "Only Updated Region"
+        gdf_updated = gdf[gdf["id"] == id_to_update].copy()
+        gdf_updated["maakunta"] = updated_region
+
+        modified_shp_path = temp_dir_path / "modified.shp"
+        gdf_updated.to_file(modified_shp_path)
+
+        modified_zip_path = temp_dir_path / "modified.zip"
+        with zipfile.ZipFile(modified_zip_path, "w") as zf:
+            for ext in [".shp", ".shx", ".dbf", ".prj", ".cpg"]:
+                file = modified_shp_path.with_suffix(ext)
+                if file.exists():
+                    zf.write(file, file.name)
+
+        with open(modified_zip_path, "rb") as f:
+            updated_zip_content = f.read()
+
+    # Call update endpoint with delete_areas_not_updated=False
+    files = [("zip_file", ("modified.zip", updated_zip_content, "application/zip"))]
+    update_data = {
+        "delete_areas_not_updated": False,
+        "id_col": "id",
+        "name_col": "nimi",
+        "municipality_col": "kunta",
+        "region_col": "maakunta",
+        "area_col": "ala_ha",
+    }
+
+    response = await client.patch(
+        f"/layer/{layer_id}", files=files, data=update_data, headers=auth_headers
+    )
+    assert response.status_code == 200
+
+    # Verify changes
+    response = await client.get(f"/layer/{layer_id}/areas", headers=auth_headers)
+    assert response.status_code == 200
+    updated_areas = response.json()["features"]
+
+    assert len(updated_areas) == original_feature_count
+
+    updated_feature = next(
+        f for f in updated_areas if f["properties"]["original_id"] == str(id_to_update)
+    )
+    assert updated_feature["properties"]["region"] == updated_region
 
 
 @pytest.mark.order(order_num + 11)  # Assuming previous test was order_num + 10
