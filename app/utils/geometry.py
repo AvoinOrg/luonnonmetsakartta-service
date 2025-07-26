@@ -1,12 +1,10 @@
 from math import isnan
-from uuid import UUID
 import geopandas as gpd
 import numpy as np
 from shapely.ops import transform, unary_union
-from shapely.geometry import Polygon, MultiPolygon
 from geoalchemy2.shape import from_shape, to_shape
 from geoalchemy2.elements import WKBElement
-from sqlalchemy import TextClause, select, text
+from sqlalchemy import TextClause, text
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import cast
 
