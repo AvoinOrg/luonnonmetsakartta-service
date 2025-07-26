@@ -151,6 +151,8 @@ async def update_layer_areas(
                     existing_area.region = region
                 if area_ha is not None:
                     existing_area.area_ha = area_ha
+                if original_id is not None:
+                    existing_area.original_id = original_id
                 existing_area.geometry = from_shape(geom, srid=srid)
 
                 if existing_area.original_properties:
