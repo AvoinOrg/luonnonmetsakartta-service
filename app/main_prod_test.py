@@ -49,9 +49,8 @@ async def cleanup_test_layers(client: httpx.AsyncClient, auth_headers):
         if response.status_code == 200:
             layers = response.json()
             for layer in layers:
-                if "Test Layer" in layer.get(
-                    "name", ""
-                ) or "Real Test Layer" in layer.get("name", ""):
+                if "Test Layer 83046gjsagasg964znfdljg0" in layer.get("name", ""):
+                    # ) or "Test Layer" in layer.get("name", ""):
                     logger.info(
                         f"Found leftover test layer to delete: {layer.get('name')} ({layer.get('id')})"
                     )
@@ -108,6 +107,11 @@ def real_shapefile():
     with open(zip_path, "rb") as f:
         return f.read()
 
+@pytest.fixture(scope="session")
+def real_shapefile_unique():
+    zip_path = Path("data/test_data_unique.zip")
+    with open(zip_path, "rb") as f:
+        return f.read()
 
 @pytest.fixture(scope="session")
 async def auth_headers():
@@ -182,7 +186,7 @@ async def test_create_layer_success(
     try:
         files = [("zip_file", ("test.zip", mock_shapefile, "application/zip"))]
         data = {
-            "name": "Test Layer",
+            "name": "Test Layer 83046gjsagasg964znfdljg0",
             "description": "Test Description",
             "is_hidden": False,
             "indexing_strategy": "id",
@@ -219,7 +223,7 @@ async def test_import_real_shapefile_success(
     try:
         files = [("zip_file", ("test.zip", real_shapefile, "application/zip"))]
         data = {
-            "name": "Real Test Layer",
+            "name": "Test Layer 83046gjsagasg964znfdljg0 real",
             "description": "Test Description for real shapefile",
             "indexing_strategy": "id",
             "id_col": "id",
@@ -255,7 +259,7 @@ async def test_import_real_shapefile_success_2(
     try:
         files = [("zip_file", ("test.zip", real_shapefile, "application/zip"))]
         data = {
-            "name": "Real Test Layer",
+            "name": "Real Test Layer 83046gjsagasg964znfdljg0",
             "description": "Test Description for real shapefile",
             "indexing_strategy": "id",
             "id_col": "id",
@@ -298,7 +302,7 @@ async def test_layers(
         "/layer",
         files=files,
         data={
-            "name": "Test Layer 1",
+            "name": "Test Layer 83046gjsagasg964znfdljg0 1",
             "description": "First test layer",
             "indexing_strategy": "id",
             "id_col": "id",
@@ -315,7 +319,7 @@ async def test_layers(
         "/layer",
         files=files,
         data={
-            "name": "Test Layer 2",
+            "name": "Test Layer 83046gjsagasg964znfdljg0 2",
             "description": "Second test layer",
             "is_hidden": False,
             "indexing_strategy": "id",
@@ -354,8 +358,8 @@ async def test_get_layers_no_auth(
 
     # Verify only visible layer is present
     layer_names = [layer["name"] for layer in layers]
-    assert "Test Layer 1" not in layer_names  # Hidden layer
-    assert "Test Layer 2" in layer_names  # Public layer
+    assert "Test Layer 83046gjsagasg964znfdljg0 1" not in layer_names  # Hidden layer
+    assert "Test Layer 83046gjsagasg964znfdljg0 2" in layer_names  # Public layer
 
     # Verify layer structure for non-editors
     for layer in layers:
@@ -382,8 +386,8 @@ async def test_get_layers_invalid_auth(
 
     # Verify only visible layer is present
     layer_names = [layer["name"] for layer in layers]
-    assert "Test Layer 1" not in layer_names
-    assert "Test Layer 2" in layer_names
+    assert "Test Layer 83046gjsagasg964znfdljg0 1" not in layer_names
+    assert "Test Layer 83046gjsagasg964znfdljg0 2" in layer_names
 
     for layer in layers:
         assert "is_hidden" not in layer
@@ -405,8 +409,8 @@ async def test_get_layers_no_roles(
     assert isinstance(layers, list)
 
     layer_names = [layer["name"] for layer in layers]
-    assert "Test Layer 1" not in layer_names
-    assert "Test Layer 2" in layer_names
+    assert "Test Layer 83046gjsagasg964znfdljg0 1" not in layer_names
+    assert "Test Layer 83046gjsagasg964znfdljg0 2" in layer_names
 
     for layer in layers:
         assert "is_hidden" not in layer
@@ -428,8 +432,8 @@ async def test_get_layers_with_editor(
     assert isinstance(layers, list)
 
     layer_names = [layer["name"] for layer in layers]
-    assert "Test Layer 1" in layer_names
-    assert "Test Layer 2" in layer_names
+    assert "Test Layer 83046gjsagasg964znfdljg0 1" in layer_names
+    assert "Test Layer 83046gjsagasg964znfdljg0 2" in layer_names
 
     # Verify editors see is_hidden field
     for layer in layers:
@@ -447,7 +451,7 @@ async def test_layer_for_update(
         "/layer",
         files=files,
         data={
-            "name": "Test Layer 1",
+            "name": "Test Layer 83046gjsagasg964znfdljg0 1",
             "description": "First test layer",
             "is_hidden": True,
             "indexing_strategy": "id",
@@ -477,7 +481,7 @@ async def test_update_layer_with_editor(
 ):
     """Test updating layer with editor privileges"""
     updated_data = {
-        "name": "Updated Test Layer",
+        "name": "Updated Test Layer 83046gjsagasg964znfdljg0",
         "description": "Updated description",
         "is_hidden": False,
     }
@@ -504,7 +508,7 @@ async def test_update_layer_no_auth(
 ):
     """Test updating layer without authentication"""
     updated_data = {
-        "name": "Updated Test Layer",
+        "name": "Updated Test Layer 83046gjsagasg964znfdljg0",
         "description": "Updated description",
     }
 
@@ -522,7 +526,7 @@ async def test_update_layer_invalid_auth(
 ):
     """Test updating layer with invalid authentication"""
     updated_data = {
-        "name": "Updated Test Layer",
+        "name": "Updated Test Layer 83046gjsagasg964znfdljg0",
         "description": "Updated description",
     }
 
@@ -544,7 +548,7 @@ async def test_update_layer_no_roles(
 ):
     """Test updating layer with authenticated user without roles"""
     updated_data = {
-        "name": "Updated Test Layer",
+        "name": "Updated Test Layer 83046gjsagasg964znfdljg0",
         "description": "Updated description",
     }
 
@@ -661,9 +665,9 @@ async def layer_with_feature_for_update(
     response = await client.get(f"/layer/{layer_id}/areas", headers=auth_headers)
     assert response.status_code == 200
     areas_geojson = response.json()
-    assert (
-        "features" in areas_geojson and len(areas_geojson["features"]) > 0
-    ), "Mock shapefile should create at least one feature"
+    assert "features" in areas_geojson and len(areas_geojson["features"]) > 0, (
+        "Mock shapefile should create at least one feature"
+    )
     feature_id = areas_geojson["features"][0]["id"]
 
     yield layer_id, feature_id
@@ -686,7 +690,7 @@ async def layer_for_shapefile_update(
     """Create a test layer for shapefile update tests using real data."""
     files = [("zip_file", ("test.zip", real_shapefile, "application/zip"))]
     data = {
-        "name": "Test Layer for Shapefile Update",
+        "name": "Test Layer 83046gjsagasg964znfdljg0 for Shapefile Update",
         "description": "Initial layer for testing shapefile updates",
         "is_hidden": False,
         "indexing_strategy": "id",
@@ -708,14 +712,14 @@ async def layer_for_shapefile_update(
 @pytest.fixture(scope="function")
 async def layer_for_shapefile_update_with_name_municipality_indexing(
     client: httpx.AsyncClient,
-    real_shapefile,
+    real_shapefile_unique,
     auth_headers,
     prod_monkeypatch_get_async_context_db,
 ):
     """Create a test layer for shapefile update tests using real data."""
-    files = [("zip_file", ("test.zip", real_shapefile, "application/zip"))]
+    files = [("zip_file", ("test.zip", real_shapefile_unique, "application/zip"))]
     data = {
-        "name": "Test Layer for Shapefile Update",
+        "name": "Test Layer 83046gjsagasg964znfdljg0 for Shapefile Update",
         "description": "Initial layer for testing shapefile updates",
         "is_hidden": False,
         "indexing_strategy": "name_municipality",
@@ -723,7 +727,7 @@ async def layer_for_shapefile_update_with_name_municipality_indexing(
         "name_col": "nimi",
         "municipality_col": "kunta",
         "region_col": "maakunta",
-        "area_col": "alue", 
+        "area_col": "alue",
     }
     response = await client.post("/layer", files=files, data=data, headers=auth_headers)
     assert response.status_code == 200
