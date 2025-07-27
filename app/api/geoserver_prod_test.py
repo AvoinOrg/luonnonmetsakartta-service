@@ -190,6 +190,12 @@ async def layer_and_feature_for_cache_test(prod_monkeypatch_get_async_context_db
             id=TEST_CACHE_LAYER_ID,
             name="Cache Test Layer",
             description="Layer for testing GWC invalidation",
+            col_options={
+                "indexingStrategy": "id",
+                "idCol": "id",
+                "nameCol": "name",
+                "municipalityCol": "municipality",
+            },
         )
         session.add(db_layer)
         await session.commit()
@@ -210,6 +216,7 @@ async def layer_and_feature_for_cache_test(prod_monkeypatch_get_async_context_db
         db_feature = ForestArea(
             id=TEST_CACHE_FEATURE_ID,
             layer_id=db_layer.id,
+            original_id="asdf",
             name="Cache Test Feature",
             geometry=from_shape(polygon, srid=3067),
         )
@@ -314,9 +321,9 @@ async def test_truncate_gwc_tiles_for_gridset_direct_call(
             gridset_id_to_truncate="EPSG:900913",
             tile_format="application/vnd.mapbox-vector-tile",
         )
-        assert (
-            result_900913 is True
-        ), "GWC truncation for EPSG:900913 gridset failed or returned False"
+        assert result_900913 is True, (
+            "GWC truncation for EPSG:900913 gridset failed or returned False"
+        )
     except Exception as e:
         logger.error(f"Error during GWC truncation for EPSG:900913: {e}")
         pytest.fail(f"GWC truncation for EPSG:900913 gridset raised an exception: {e}")
@@ -330,9 +337,9 @@ async def test_truncate_gwc_tiles_for_gridset_direct_call(
         gridset_id_to_truncate="EPSG:900913",
         tile_format="application/vnd.mapbox-vector-tile",
     )
-    assert (
-        result_centroid_900913 is True
-    ), "GWC truncation for centroid layer (EPSG:900913) failed"
+    assert result_centroid_900913 is True, (
+        "GWC truncation for centroid layer (EPSG:900913) failed"
+    )
 
 
 @pytest.mark.order(
@@ -391,9 +398,9 @@ async def test_delete_geoserver_layer(prod_monkeypatch_get_async_context_db):
             layer_url, auth=(GEOSERVER_USER, GEOSERVER_PASSWORD)
         )
         # We expect 404 or similar error post-deletion
-        assert (
-            response.status_code == 404
-        ), f"Expected status_code=404 after deletion, got {response.status_code}"
+        assert response.status_code == 404, (
+            f"Expected status_code=404 after deletion, got {response.status_code}"
+        )
 
 
 @pytest.fixture(scope="function")
@@ -412,6 +419,12 @@ async def layer_and_features_for_cache_test(prod_monkeypatch_get_async_context_d
             id=TEST_CACHE_LAYER_ID,
             name="Cache Test Layer",
             description="Layer for testing GWC invalidation",
+            col_options={
+                "indexingStrategy": "id",
+                "idCol": "id",
+                "nameCol": "name",
+                "municipalityCol": "municipality",
+            },
         )
         session.add(db_layer)
         await session.commit()
@@ -444,6 +457,7 @@ async def layer_and_features_for_cache_test(prod_monkeypatch_get_async_context_d
             feature = ForestArea(
                 id=UUID(f"00000000-0000-0000-0000-00000000077{i}"),
                 layer_id=db_layer.id,
+                original_id=f"feature_{i}",
                 name=f"Cache Test Feature {i}",
                 geometry=from_shape(polygon, srid=3067),
             )
@@ -487,9 +501,10 @@ async def layer_and_features_for_cache_test(prod_monkeypatch_get_async_context_d
             f"Exception during GeoServer layer creation for cache test: {e_gs}"
         )
 
-    yield db_layer.id, [
-        feature.id for feature in db_features
-    ]  # Provide IDs to the test
+    yield (
+        db_layer.id,
+        [feature.id for feature in db_features],
+    )  # Provide IDs to the test
 
     # Cleanup
     logger.info(f"Cleaning up cache test data for layer {TEST_CACHE_LAYER_ID}")
