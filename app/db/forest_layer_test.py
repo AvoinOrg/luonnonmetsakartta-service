@@ -29,6 +29,14 @@ def forest_layer_data():
         "color_code": "#FF0000",
         "symbol": "TFL",
         "description": "Test forest layer description",
+        "col_options": {
+            "indexingStrategy": "name_municipality",
+            "idCol": "id",
+            "nameCol": "name",
+            "municipalityCol": "municipality",
+            "regionCol": "region",
+            "areaCol": "area",
+        },
         "original_properties": {"key": "value"},
     }
 
