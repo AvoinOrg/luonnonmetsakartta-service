@@ -30,7 +30,8 @@ def upgrade() -> None:
     sa.ForeignKeyConstraint(['forest_area_id'], ['forest_area.id'], ),
     sa.PrimaryKeyConstraint('id')
     )
-    op.drop_column('forest_area', 'pictures')
+    op.execute('ALTER TABLE forest_area DROP COLUMN pictures CASCADE')
+
     # ### end Alembic commands ###
 
 
