@@ -544,7 +544,16 @@ async def get_areas_for_layer(
 
                 # Include pictures if available
                 if hasattr(area, "pictures") and area.pictures:
-                    properties["pictures"] = area.pictures
+                    properties["pictures"] = [
+                        {
+                            "id": str(p.id),
+                            "bucket_url": p.bucket_url,
+                            "is_visible": p.is_visible,
+                            "date_added": p.date_added.isoformat(),
+                            "name": p.name,
+                        }
+                        for p in area.pictures
+                    ]
 
                 if geometry_json:  # Only add features with valid geometry
                     features.append(
@@ -755,7 +764,16 @@ async def update_feature_in_layer(
                 ),
             }
             if final_area.pictures:
-                properties["pictures"] = final_area.pictures
+                properties["pictures"] = [
+                    {
+                        "id": str(p.id),
+                        "bucket_url": p.bucket_url,
+                        "is_visible": p.is_visible,
+                        "date_added": p.date_added.isoformat(),
+                        "name": p.name,
+                    }
+                    for p in final_area.pictures
+                ]
             if final_area.original_properties:
                 # Ensure original_properties is a dict before updating
                 if isinstance(final_area.original_properties, dict):
