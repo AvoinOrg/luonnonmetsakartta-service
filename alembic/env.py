@@ -12,6 +12,7 @@ from geoalchemy2 import types as geo_types
 from app.db.models.base import Base
 from app.db.models.forest_layer import ForestLayer
 from app.db.models.forest_area import ForestArea
+from app.db.models.picture import Picture
 from app.utils.general import str_to_bool
 
 env_vars = os.environ
