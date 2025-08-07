@@ -6,7 +6,7 @@ import tempfile
 import traceback
 from typing import Any, List, Literal
 from fastapi import Depends, UploadFile, File, Form, HTTPException
-from uuid import UUID
+from uuid import UUID, uuid4
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -15,6 +15,7 @@ from pydantic import BaseModel
 import geopandas as gpd
 
 from app import config
+from app.api.bucket import upload_picture_to_bucket
 from app.auth.utils import get_editor_status_optional, get_editor_status
 from app.utils.logger import get_logger
 from app.db import connection
@@ -649,16 +650,20 @@ async def update_feature_in_layer(
             if new_pictures:
                 for file in new_pictures:
                     if file.filename:
-                        # In a real application, you would upload the file to a cloud storage
-                        # and get a URL. For now, we'll use a placeholder.
-                        bucket_url = f"uploads/{feature_id}/{file.filename}"
-
-                        new_picture = Picture(
-                            forest_area_id=feature_id,
+                        picture_id = uuid4()
+                        bucket_url = await upload_picture_to_bucket(
+                            file=file,
+                            layer_id=str(layer_id),
+                            forest_area_id=str(feature_id),
+                            picture_id=picture_id,
+                        )
+                        picture = Picture(
+                            id=picture_id,
+                            forest_area_id=str(feature_id),
                             bucket_url=bucket_url,
                             name=file.filename,
                         )
-                        session.add(new_picture)
+                        session.add(picture)
                         updated_fields = True
 
             if name is not None:
@@ -793,6 +798,8 @@ async def update_feature_in_layer(
                     logger.warning(
                         f"Feature {final_area.id} original_properties is not a dict: {type(final_area.original_properties)}"
                     )
+
+            await session.commit()
 
             return GeoJSONFeature(
                 id=str(final_area.id),
