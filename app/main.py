@@ -4,7 +4,7 @@ import json
 import shutil
 import tempfile
 import traceback
-from typing import Any, Literal
+from typing import Any, List, Literal
 from fastapi import Depends, UploadFile, File, Form, HTTPException
 from uuid import UUID
 
@@ -18,6 +18,7 @@ from app import config
 from app.auth.utils import get_editor_status_optional, get_editor_status
 from app.utils.logger import get_logger
 from app.db import connection
+from app.db.models.picture import Picture
 from app.utils.geometry import (
     import_shapefile_to_layer,
     update_layer_areas,
@@ -584,9 +585,8 @@ async def update_feature_in_layer(
     feature_id: UUID,
     name: str | None = Form(None),
     description: str | None = Form(None),
-    pictures_json: str | None = Form(
-        None
-    ),  # Expects a JSON string e.g. '["url1", "url2"]'
+    pictures_json: str | None = Form(None),
+    new_pictures: list[UploadFile] | None = File(None),
     municipality: str | None = Form(None),
     region: str | None = Form(None),
     area_ha: float | None = Form(None),
@@ -596,9 +596,6 @@ async def update_feature_in_layer(
     # geometry_geojson: str | None = Form(
     #     None
     # ),  # Expects a GeoJSON geometry string, e.g. '{"type": "Point", "coordinates": [25, 60]}'
-    # original_properties_json: str | None = Form(
-    #     None
-    # ),  # Expects a JSON string for a dictionary e.g. '{"key": "value"}'
     editor_status: dict = Depends(get_editor_status),
 ):
     if not editor_status.get("is_editor"):
@@ -622,6 +619,48 @@ async def update_feature_in_layer(
                 )
 
             updated_fields = False
+
+            # Handle picture deletions and reordering
+            if pictures_json is not None:
+                try:
+                    picture_ids_to_keep = json.loads(pictures_json)
+                    if not isinstance(picture_ids_to_keep, list):
+                        raise ValueError("pictures_json must be a list of picture IDs.")
+
+                    ids_to_keep_set = set(picture_ids_to_keep)
+                    pictures_to_delete = [
+                        p
+                        for p in area_to_update.pictures
+                        if str(p.id) not in ids_to_keep_set
+                    ]
+
+                    if pictures_to_delete:
+                        for pic in pictures_to_delete:
+                            await session.delete(pic)
+                        updated_fields = True
+
+                except (json.JSONDecodeError, ValueError) as e:
+                    raise HTTPException(
+                        status_code=400,
+                        detail=f"Invalid format for pictures_json: {str(e)}",
+                    )
+
+            # Handle new picture uploads
+            if new_pictures:
+                for file in new_pictures:
+                    if file.filename:
+                        # In a real application, you would upload the file to a cloud storage
+                        # and get a URL. For now, we'll use a placeholder.
+                        bucket_url = f"uploads/{feature_id}/{file.filename}"
+
+                        new_picture = Picture(
+                            forest_area_id=feature_id,
+                            bucket_url=bucket_url,
+                            name=file.filename,
+                        )
+                        session.add(new_picture)
+                        updated_fields = True
+
             if name is not None:
                 area_to_update.name = name
                 updated_fields = True
@@ -630,14 +669,6 @@ async def update_feature_in_layer(
                     description  # Stored as JSON string in JSONB
                 )
                 updated_fields = True
-            if pictures_json is not None:
-                try:
-                    area_to_update.pictures = json.loads(pictures_json)
-                    updated_fields = True
-                except json.JSONDecodeError:
-                    raise HTTPException(
-                        status_code=400, detail="Invalid JSON format for pictures"
-                    )
             if municipality is not None:
                 area_to_update.municipality = municipality
                 updated_fields = True
@@ -662,18 +693,6 @@ async def update_feature_in_layer(
             if person_responsible is not None:
                 area_to_update.person_responsible = person_responsible
                 updated_fields = True
-            # if original_properties_json is not None:
-            #     try:
-            #         area_to_update.original_properties = json.loads(
-            #             original_properties_json
-            #         )
-            #         updated_fields = True
-            #     except json.JSONDecodeError:
-            #         raise HTTPException(
-            #             status_code=400,
-            #             detail="Invalid JSON format for original_properties",
-            #         )
-
             # if geometry_geojson is not None:
             #     try:
             #         # Assumes input GeoJSON is EPSG:4326 and transforms to SRID 3067
@@ -697,42 +716,35 @@ async def update_feature_in_layer(
                 area_to_update.updated_ts = datetime.now(timezone.utc)
                 updated_area_db = await update_forest_area(session, area_to_update)
                 if not updated_area_db:
-                    # This case should ideally not be hit if update_forest_area raises on SQL error
                     raise HTTPException(
                         status_code=500, detail="Failed to update feature in database"
                     )
                 try:
                     await invalidate_geoserver_cache_for_feature(
-                        layer_id_uuid=layer_id,  # FastAPI converts path param to UUID
-                        feature_id_uuid=feature_id,  # FastAPI converts path param to UUID
+                        layer_id_uuid=layer_id,
+                        feature_id_uuid=feature_id,
                     )
                     logger.info(
                         f"GeoServer GWC cache invalidation request processed for feature {feature_id} in layer {layer_id}"
                     )
                 except Exception as e_cache:
-                    # Log error but don't fail the entire request if cache invalidation fails
                     logger.error(
                         f"Failed to invalidate GeoServer GWC cache for feature {feature_id} in layer {layer_id}: {e_cache}"
                     )
                 final_area = updated_area_db
             else:
-                final_area = area_to_update  # No changes made, return existing
+                final_area = area_to_update
 
-            # Construct GeoJSONFeature response using the feature's centroid
+            # Construct GeoJSONFeature response
             geometry_for_response_dict = {}
-            # The centroid is computed and should be refreshed by update_forest_area
             if final_area.centroid is not None:
                 try:
                     shapely_geom = geoalchemy2.shape.to_shape(final_area.centroid)
-                    # Note: This geometry is in SRID 3067. GeoJSON typically implies WGS84 (4326).
-                    # For consistency with get_areas_for_layer, we don't transform it here.
-                    # Clients should be aware of the CRS or it should be specified in the GeoJSON's CRS member if needed.
                     geometry_for_response_dict = shapely_geom.__geo_interface__
                 except Exception as e:
                     logger.error(
                         f"Error converting centroid to GeoJSON for feature {final_area.id}: {e}"
                     )
-                    # Keep geometry_for_response_dict as {}
 
             properties = {
                 "id": str(final_area.id),
@@ -775,17 +787,16 @@ async def update_feature_in_layer(
                     for p in final_area.pictures
                 ]
             if final_area.original_properties:
-                # Ensure original_properties is a dict before updating
                 if isinstance(final_area.original_properties, dict):
                     properties.update(final_area.original_properties)
-                else:  # Log if it's not a dict, though model expects dict
+                else:
                     logger.warning(
                         f"Feature {final_area.id} original_properties is not a dict: {type(final_area.original_properties)}"
                     )
 
             return GeoJSONFeature(
                 id=str(final_area.id),
-                geometry=geometry_for_response_dict,  # Must be a dict
+                geometry=geometry_for_response_dict,
                 properties=properties,
             )
     except HTTPException as he:
