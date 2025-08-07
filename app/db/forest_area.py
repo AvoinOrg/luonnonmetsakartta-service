@@ -3,21 +3,22 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 from sqlalchemy import delete, func
 from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy.orm import selectinload
 
 from app.db.models.forest_area import ForestArea
 
 
-async def get_forest_area_by_id(
-    db_session: AsyncSession, id: str
-) -> Optional[ForestArea]:
-    result = await db_session.execute(select(ForestArea).filter_by(id=id))
+async def get_forest_area_by_id(db_session: AsyncSession, id: str) -> ForestArea | None:
+    result = await db_session.execute(
+        select(ForestArea).options(selectinload(ForestArea.pictures)).filter_by(id=id)
+    )
     area = result.scalars().first()
     return area if area else None
 
 
 async def get_forest_area_by_ids(  # New function
     db_session: AsyncSession, layer_id: str, area_id: str
-) -> Optional[ForestArea]:
+) -> ForestArea | None:
     """
     Retrieves a specific ForestArea by its ID and Layer ID.
     """
@@ -30,7 +31,7 @@ async def get_forest_area_by_ids(  # New function
 
 async def get_forest_area_by_original_id_and_layer_id(
     db_session: AsyncSession, original_id: str, layer_id: str
-) -> Optional[ForestArea]:
+) -> ForestArea | None:
     """
     Retrieves a specific ForestArea by its original_id and layer_id.
     """
@@ -42,7 +43,7 @@ async def get_forest_area_by_original_id_and_layer_id(
 
 async def get_forest_area_by_name_municipality_and_layer_id(
     db_session: AsyncSession, name: str, municipality: str, layer_id: str
-) -> Optional[ForestArea]:
+) -> ForestArea | None:
     """
     Retrieves a specific ForestArea by its name, municipality, and layer_id.
     """
@@ -166,7 +167,7 @@ async def delete_forest_area_by_layer_id(
 
 async def get_forest_area_by_name(
     db_session: AsyncSession, name: str
-) -> Optional[ForestArea]:
+) -> ForestArea | None:
     result = await db_session.execute(
         select(ForestArea).filter(ForestArea.name.ilike(name))
     )
