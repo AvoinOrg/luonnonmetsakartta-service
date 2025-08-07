@@ -40,7 +40,6 @@ from app.api.geoserver import (
 from app.db.forest_area import (
     get_forest_area_by_id,
     get_forest_areas_centroids_by_layer_id,
-    get_forest_areas_by_layer_id,
     update_forest_area,
 )
 from app.types.general import ColOptions, IndexingStrategy
