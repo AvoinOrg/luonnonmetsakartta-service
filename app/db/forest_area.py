@@ -1,4 +1,4 @@
-from typing import List, Optional, Union
+from typing import List, Union
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 from sqlalchemy import delete, func
@@ -6,6 +6,7 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import selectinload
 
 from app.db.models.forest_area import ForestArea
+from app.db.models.picture import Picture
 
 
 async def get_forest_area_by_id(db_session: AsyncSession, id: str) -> ForestArea | None:
@@ -153,10 +154,15 @@ async def delete_forest_area_by_id(db_session: AsyncSession, id: str) -> bool:
 async def delete_forest_area_by_layer_id(
     db_session: AsyncSession, layer_id: str
 ) -> bool:
-    if not id:
+    if not layer_id:
         return False
 
     try:
+        # First delete pictures referencing forest areas in this layer (defensive in case FK lacks ON DELETE CASCADE)
+        subquery = select(ForestArea.id).where(ForestArea.layer_id == layer_id)
+        await db_session.execute(
+            delete(Picture).where(Picture.forest_area_id.in_(subquery))
+        )
         await db_session.execute(delete(ForestArea).filter_by(layer_id=layer_id))
         await db_session.commit()
         return True

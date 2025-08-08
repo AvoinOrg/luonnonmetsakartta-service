@@ -34,7 +34,11 @@ class ForestArea(Base):
     )
     name: Mapped[str] = mapped_column(Text, nullable=False)
     description: Mapped[str | None] = mapped_column(JSONB, nullable=True)
-    pictures: Mapped[list["Picture"]] = relationship(back_populates="forest_area")
+    pictures: Mapped[list["Picture"]] = relationship(
+        back_populates="forest_area",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+    )
     municipality: Mapped[str | None] = mapped_column(Text, nullable=True)
     region: Mapped[str | None] = mapped_column(Text, nullable=True)
     area_ha: Mapped[float | None] = mapped_column(Numeric, nullable=True)
