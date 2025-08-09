@@ -1,4 +1,5 @@
 from contextlib import asynccontextmanager
+import asyncio
 from datetime import datetime, timezone
 import json
 import shutil
@@ -15,7 +16,11 @@ from pydantic import BaseModel
 import geopandas as gpd
 
 from app import config
-from app.api.bucket import upload_picture_to_bucket
+from app.api.bucket import upload_picture_to_bucket, delete_layer_bucket, delete_file_by_public_url
+from app.utils.storage_cleanup import (
+    enqueue_bucket_deletion,
+    start_storage_cleanup_worker,
+)
 from app.auth.utils import get_editor_status_optional, get_editor_status
 from app.utils.logger import get_logger
 from app.db import connection
@@ -51,8 +56,19 @@ global_settings = config.get_settings()
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     print("starting up")
-    yield
-    print("shutting down")
+    # Start background storage cleanup worker
+    stop_event = asyncio.Event()
+    worker_task = asyncio.create_task(start_storage_cleanup_worker(stop_event))
+    try:
+        yield
+    finally:
+        # Stop worker gracefully
+        stop_event.set()
+        try:
+            await asyncio.wait_for(worker_task, timeout=5)
+        except asyncio.TimeoutError:
+            worker_task.cancel()
+        print("shutting down")
 
 
 app = FastAPI(lifespan=lifespan)
@@ -221,6 +237,23 @@ async def delete_layer(layer_id: str, editor_status=Depends(get_editor_status)):
             if not result:
                 raise HTTPException(status_code=500, detail="Database deletion failed")
 
+            # Best-effort delete the storage bucket for this layer (after DB success)
+            try:
+                await delete_layer_bucket(layer_id)
+            except Exception as e:
+                logger.error(f"Failed to delete storage bucket for layer {layer_id}: {e}")
+                # Queue deletion for later retry
+                try:
+                    bucket_name = f"{global_settings.storage_bucket_prefix}-{layer_id}".lower()
+                    await enqueue_bucket_deletion(bucket_name)
+                    logger.info(
+                        f"Enqueued deferred deletion for bucket '{bucket_name}' (layer {layer_id})."
+                    )
+                except Exception as e2:
+                    logger.error(
+                        f"Failed to enqueue deferred bucket deletion for layer {layer_id}: {e2}"
+                    )
+
             return {"message": f"Layer {layer_id} deleted successfully"}
 
     except HTTPException as he:
@@ -373,7 +406,7 @@ async def update_layer(
                     else:
                         raise HTTPException(
                             status_code=500,
-                            detail=f"Failed to update layer visibility",
+                            detail="Failed to update layer visibility",
                         )
 
             # Import new areas if shapefile provided
@@ -434,7 +467,7 @@ async def update_layer(
 
             if not updated_layer:
                 raise HTTPException(
-                    status_code=500, detail=f"Failed to update layer metadata"
+                    status_code=500, detail="Failed to update layer metadata"
                 )
 
             return LayerResponse(
@@ -635,7 +668,14 @@ async def update_feature_in_layer(
                     ]
 
                     if pictures_to_delete:
+                        # Delete files from storage first (best-effort), then remove DB rows
                         for pic in pictures_to_delete:
+                            try:
+                                await delete_file_by_public_url(pic.bucket_url)
+                            except Exception as e:
+                                logger.error(
+                                    f"Failed to delete picture object from storage (picture_id={pic.id}): {e}"
+                                )
                             await session.delete(pic)
                         updated_fields = True
 
