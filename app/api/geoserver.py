@@ -308,21 +308,27 @@ async def create_geoserver_centroid_layer(
     # SQL to create view with just id, name, and centroid
     sql_view = f"""
         CREATE OR REPLACE VIEW {view_name} AS
-        SELECT 
-            id,
-            name,
-            created_ts,
-            updated_ts,
-            description,
-            pictures,
-            municipality,
-            region,
-            area_ha,
-            date,
-            centroid AS geometry
-        FROM forest_area 
-        WHERE layer_id::text = '{str(forest_layer_id)}'
-        AND centroid IS NOT NULL
+        SELECT
+            fa.id,
+            fa.name,
+            fa.created_ts,
+            fa.updated_ts,
+            fa.description,
+            fa.municipality,
+            fa.region,
+            fa.area_ha,
+            fa.date,
+            fa.centroid AS geometry,
+            jsonb_agg(p.bucket_url) FILTER (WHERE p.id IS NOT NULL) as pictures
+        FROM
+            forest_area fa
+        LEFT JOIN
+            picture p ON fa.id = p.forest_area_id
+        WHERE
+            fa.layer_id::text = '{str(forest_layer_id)}'
+            AND fa.centroid IS NOT NULL
+        GROUP BY
+            fa.id
     """
 
     # Step 1: Create a database view
