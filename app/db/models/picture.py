@@ -22,7 +22,7 @@ class Picture(Base):
         server_default=text("gen_random_uuid()"),
     )
     forest_area_id: Mapped[str] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("forest_area.id"), nullable=False
+        UUID(as_uuid=True), ForeignKey("forest_area.id", ondelete="CASCADE"), nullable=False
     )
     bucket_url: Mapped[str] = mapped_column(Text, nullable=False)
     is_visible: Mapped[bool] = mapped_column(
