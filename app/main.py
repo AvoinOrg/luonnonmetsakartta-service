@@ -5,7 +5,7 @@ import json
 import shutil
 import tempfile
 import traceback
-from typing import Any, List, Literal
+from typing import Any
 from fastapi import Depends, UploadFile, File, Form, HTTPException
 from uuid import UUID, uuid4
 
@@ -16,7 +16,11 @@ from pydantic import BaseModel
 import geopandas as gpd
 
 from app import config
-from app.api.bucket import upload_picture_to_bucket, delete_layer_bucket, delete_file_by_public_url
+from app.api.bucket import (
+    upload_picture_to_bucket,
+    delete_layer_bucket,
+    delete_file_by_public_url,
+)
 from app.utils.storage_cleanup import (
     enqueue_bucket_deletion,
     start_storage_cleanup_worker,
@@ -241,10 +245,14 @@ async def delete_layer(layer_id: str, editor_status=Depends(get_editor_status)):
             try:
                 await delete_layer_bucket(layer_id)
             except Exception as e:
-                logger.error(f"Failed to delete storage bucket for layer {layer_id}: {e}")
+                logger.error(
+                    f"Failed to delete storage bucket for layer {layer_id}: {e}"
+                )
                 # Queue deletion for later retry
                 try:
-                    bucket_name = f"{global_settings.storage_bucket_prefix}-{layer_id}".lower()
+                    bucket_name = (
+                        f"{global_settings.storage_bucket_prefix}-{layer_id}".lower()
+                    )
                     await enqueue_bucket_deletion(bucket_name)
                     logger.info(
                         f"Enqueued deferred deletion for bucket '{bucket_name}' (layer {layer_id})."
@@ -374,6 +382,9 @@ async def update_layer(
     region_col: str | None = Form(None),
     description_col: str | None = Form(None),
     area_col: str | None = Form(None),
+    # New: bulk picture ingestion aligned by index with bulk_area_ids
+    bulk_images: list[UploadFile] | None = File(None),
+    bulk_area_ids: list[str] | None = Form(None),
     editor_status=Depends(get_editor_status),
 ):
     if not editor_status.get("is_editor"):  # Check if user is editor
@@ -462,7 +473,56 @@ async def update_layer(
                                 f"Failed to invalidate GeoServer GWC cache for layer {layer_id}: {e_cache}"
                             )
 
-            # Update layer in database
+            # New: Handle bulk picture uploads aligned with bulk_area_ids
+            if bulk_images is not None or bulk_area_ids is not None:
+                if not bulk_images or not bulk_area_ids:
+                    raise HTTPException(
+                        status_code=400,
+                        detail="Both bulk_images and bulk_area_ids must be provided",
+                    )
+                if len(bulk_images) != len(bulk_area_ids):
+                    raise HTTPException(
+                        status_code=400,
+                        detail="bulk_images and bulk_area_ids must have the same length",
+                    )
+
+                # Validate that all provided area IDs exist and belong to this layer
+                for idx, area_id in enumerate(bulk_area_ids):
+                    area = await get_forest_area_by_id(session, area_id)
+                    if not area:
+                        raise HTTPException(
+                            status_code=404,
+                            detail=f"Area id at index {idx} not found: {area_id}",
+                        )
+                    if str(area.layer_id) != str(layer_id):
+                        raise HTTPException(
+                            status_code=403,
+                            detail=f"Area id {area_id} does not belong to layer {layer_id}",
+                        )
+
+                # Upload and insert pictures
+                for i, file in enumerate(bulk_images):
+                    if not file.filename:
+                        raise HTTPException(
+                            status_code=400,
+                            detail=f"Missing filename for file at index {i}",
+                        )
+                    picture_id = uuid4()
+                    bucket_url = await upload_picture_to_bucket(
+                        file=file,
+                        layer_id=str(layer_id),
+                        forest_area_id=bulk_area_ids[i],
+                        picture_id=picture_id,
+                    )
+                    picture = Picture(
+                        id=picture_id,
+                        forest_area_id=bulk_area_ids[i],
+                        bucket_url=bucket_url,
+                        name=file.filename,
+                    )
+                    session.add(picture)
+
+            # Update layer in database (also commits added Picture rows)
             updated_layer = await update_forest_layer(session, layer)
 
             if not updated_layer:
