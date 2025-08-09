@@ -8,8 +8,6 @@ from pathlib import Path
 import geopandas as gpd
 from shapely.geometry import Polygon
 import tempfile
-import json
-
 from app.main import app, lifespan
 from app.utils.logger import get_logger
 from app.db.prod_connection_mock import prod_monkeypatch_get_async_context_db
@@ -1082,35 +1080,38 @@ async def test_update_layer_with_shapefile_with_name_municipality_indexing_no_de
     assert updated_feature["properties"]["region"] == updated_region
 
 
-@pytest.mark.order(order_num + 11)  # Assuming previous test was order_num + 10
+@pytest.mark.order(order_num + 11)
 @pytest.mark.asyncio
-async def test_update_feature_in_layer_success(
+async def test_update_feature_in_layer_success_and_add_picture(
     client: httpx.AsyncClient,
     layer_with_feature_for_update,
     auth_headers,
     prod_monkeypatch_get_async_context_db,
 ):
-    """Test successfully updating a feature in a layer."""
+    """Test successfully updating a feature in a layer and adding a picture."""
     layer_id, feature_id = layer_with_feature_for_update
 
     update_payload = {
         "name": "Updated Feature Name",
         "description": "This feature has been successfully updated.",
-        "pictures_json": json.dumps(
-            ["http://example.com/new_pic.jpg", "http://example.com/another_pic.jpg"]
-        ),
         "municipality": "Updated Municipality",
         "region": "Updated Region",
         "area_ha": 123.45,
-        "date": "2025-06-15",  # Pass date as a string
+        "date": "2025-06-15",
         "owner": "New Test Owner",
         "person_responsible": "New Test Responsible Person",
-        # "geometry_geojson": json.dumps({"type": "Point", "coordinates": [26.123, 61.456]}), # EPSG:4326
+        "pictures_json": "[]",
     }
+
+    with open("data/test.jpeg", "rb") as f:
+        picture_content = f.read()
+
+    files = [("new_pictures", ("test.jpeg", picture_content, "image/jpeg"))]
 
     response = await client.patch(
         f"/layer/{layer_id}/area/{feature_id}",
-        data=update_payload,  # Form data
+        data=update_payload,
+        files=files,
         headers=auth_headers,
     )
 
@@ -1123,7 +1124,6 @@ async def test_update_feature_in_layer_success(
     props = updated_feature["properties"]
     assert props["name"] == update_payload["name"]
     assert props["description"] == update_payload["description"]
-    assert props["pictures"] == json.loads(update_payload["pictures_json"])
     assert props["municipality"] == update_payload["municipality"]
     assert props["region"] == update_payload["region"]
     assert props["area_ha"] == update_payload["area_ha"]
@@ -1132,20 +1132,92 @@ async def test_update_feature_in_layer_success(
     assert props["person_responsible"] == update_payload["person_responsible"]
     assert props["layer_id"] == layer_id
 
-    # Check that original_properties (updated from original_properties_json) are merged into the main properties
-    # expected_original_props = json.loads(update_payload["original_properties_json"])
-    # for k, v in expected_original_props.items():
-    #     assert props[k] == v
-
-    # The endpoint returns the centroid of the updated geometry.
-    # The new geometry was a Point, so its centroid is itself (after SRID transformation).
-    # assert updated_feature["geometry"]["type"] == "Point"
-    # assert len(updated_feature["geometry"]["coordinates"]) == 2
-    # # We can't easily assert exact coordinates due to potential precision issues and SRID transform,
-    # # but we can check they are present and are numbers.
-    # assert isinstance(updated_feature["geometry"]["coordinates"][0], float)
-    # assert isinstance(updated_feature["geometry"]["coordinates"][1], float)
+    # Check for the new picture
+    assert "pictures" in props
+    assert len(props["pictures"]) == 1
+    new_picture = props["pictures"][0]
+    assert "id" in new_picture
+    assert "bucket_url" in new_picture
+    assert new_picture["name"] == "test.jpeg"
+    assert new_picture["is_visible"] is True
 
     assert "updated_ts" in props and props["updated_ts"] is not None
     if "created_ts" in props and props["created_ts"] is not None:
         assert props["updated_ts"] >= props["created_ts"]
+
+
+@pytest.mark.order(order_num + 12)
+@pytest.mark.asyncio
+async def test_update_feature_pictures(
+    client: httpx.AsyncClient,
+    layer_with_feature_for_update,
+    auth_headers,
+    prod_monkeypatch_get_async_context_db,
+):
+    """Test deleting and adding pictures to a feature."""
+    layer_id, feature_id = layer_with_feature_for_update
+
+    # Step 1: Add a picture first to have something to delete
+    with open("data/test.jpeg", "rb") as f:
+        picture_content = f.read()
+
+    add_files = [("new_pictures", ("initial.jpeg", picture_content, "image/jpeg"))]
+    add_payload = {"pictures_json": "[]"}
+
+    add_response = await client.patch(
+        f"/layer/{layer_id}/area/{feature_id}",
+        data=add_payload,
+        files=add_files,
+        headers=auth_headers,
+    )
+    assert add_response.status_code == 200
+    feature_with_pic = add_response.json()
+    assert len(feature_with_pic["properties"]["pictures"]) == 1
+    pic_to_delete_id = feature_with_pic["properties"]["pictures"][0]["id"]
+
+    # Step 2: Delete the picture by passing an empty pictures_json
+    delete_payload = {"pictures_json": "[]"}
+    delete_response = await client.patch(
+        f"/layer/{layer_id}/area/{feature_id}",
+        data=delete_payload,
+        headers=auth_headers,
+    )
+    assert delete_response.status_code == 200
+    feature_no_pics = delete_response.json()
+    assert "pictures" not in feature_no_pics["properties"] or len(
+        feature_no_pics["properties"]["pictures"]
+    ) == 0
+
+    # Step 3: Add two pictures in the same request
+    with open("data/test.jpeg", "rb") as f:
+        picture_content_1 = f.read()
+    with open("data/test.jpeg", "rb") as f:
+        picture_content_2 = f.read()
+
+    add_two_files = [
+        ("new_pictures", ("new1.jpeg", picture_content_1, "image/jpeg")),
+        ("new_pictures", ("new2.jpeg", picture_content_2, "image/jpeg")),
+    ]
+    add_two_payload = {"pictures_json": "[]"}
+
+    add_two_response = await client.patch(
+        f"/layer/{layer_id}/area/{feature_id}",
+        data=add_two_payload,
+        files=add_two_files,
+        headers=auth_headers,
+    )
+    assert add_two_response.status_code == 200
+    feature_with_two_pics = add_two_response.json()
+
+    props = feature_with_two_pics["properties"]
+    assert "pictures" in props
+    assert len(props["pictures"]) == 2
+
+    pic1 = props["pictures"][0]
+    pic2 = props["pictures"][1]
+
+    assert pic1["id"] != pic_to_delete_id
+    assert pic2["id"] != pic_to_delete_id
+    assert pic1["id"] != pic2["id"]
+    assert pic1["name"] == "new1.jpeg"
+    assert pic2["name"] == "new2.jpeg"
