@@ -13,7 +13,6 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 import geoalchemy2
 from pydantic import BaseModel
-import geopandas as gpd
 
 from app import config
 from app.api.bucket import (
@@ -128,7 +127,7 @@ async def create_layer(
 
     if not zip_file.filename:
         raise HTTPException(
-            status_code=400, detail=f"Missing filename in main .shp file"
+            status_code=400, detail="Missing filename in main .shp file"
         )
 
     if indexing_strategy not in ["name_municipality", "id"]:
@@ -597,7 +596,7 @@ async def get_areas_for_layer(
                 geom: geoalchemy2.Geometry = area.centroid
                 if geom:
                     # Convert WKBElement to Shapely geometry
-                    shapely_geom = geoalchemy2.shape.to_shape(geom)
+                    shapely_geom = geoalchemy2.shape.to_shape(geom)  # type: ignore[arg-type]
                     # Convert Shapely geometry to GeoJSON
                     geojson_dict = shapely_geom.__geo_interface__
                     geometry_json = geojson_dict
@@ -843,7 +842,7 @@ async def update_feature_in_layer(
             geometry_for_response_dict = {}
             if final_area.centroid is not None:
                 try:
-                    shapely_geom = geoalchemy2.shape.to_shape(final_area.centroid)
+                    shapely_geom = geoalchemy2.shape.to_shape(final_area.centroid)  # type: ignore[arg-type]
                     geometry_for_response_dict = shapely_geom.__geo_interface__
                 except Exception as e:
                     logger.error(
