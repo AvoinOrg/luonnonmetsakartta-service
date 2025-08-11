@@ -16,11 +16,18 @@ class StorageClient:
     def __init__(self):
         self.base_url = settings.storage_url
         self.auth_headers = {"Authorization": f"Bearer {settings.storage_auth_key}"}
+        # Use generous defaults to accommodate slower networks/storage backends
+        self.timeout = httpx.Timeout(connect=10.0, read=300.0, write=300.0, pool=10.0)
+        # Disable keep-alives to avoid stale connections on flaky gateways
+        self.client_limits = httpx.Limits(max_keepalive_connections=0, max_connections=20)
+        self.client_args = {"timeout": self.timeout, "limits": self.client_limits, "http2": False}
+        # Cache buckets we've attempted to create to avoid redundant requests
+        self._created_buckets: set[str] = set()
 
     async def create_bucket_if_not_exists(self, bucket_name: str):
         """Creates a new storage bucket if it doesn't already exist and makes it public."""
         check_url = f"{self.base_url}/bucket/{bucket_name}"
-        async with httpx.AsyncClient() as client:
+        async with httpx.AsyncClient(**self.client_args) as client:
             try:
                 # Check if the bucket already exists
                 response = await client.get(check_url, headers=self.auth_headers)
@@ -52,10 +59,28 @@ class StorageClient:
                 # Re-raise the exception to be handled by the caller
                 raise
 
+    async def _ensure_bucket_created(self, bucket_name: str, client: httpx.AsyncClient) -> None:
+        """Create bucket without pre-check; treat 200/201/409 as success. Caches the result."""
+        if bucket_name in self._created_buckets:
+            return
+        create_url = f"{self.base_url}/bucket"
+        headers = {**self.auth_headers, "Content-Type": "application/json"}
+        payload = {"name": bucket_name, "public": True}
+        response = await client.post(create_url, headers=headers, json=payload)
+        if response.status_code in (200, 201, 409):
+            # 409 means already exists
+            self._created_buckets.add(bucket_name)
+            if response.status_code == 409:
+                logger.info(f"Bucket '{bucket_name}' already exists (409).")
+            else:
+                logger.info(f"Successfully created bucket '{bucket_name}'.")
+            return
+        response.raise_for_status()
+
     async def empty_bucket(self, bucket_name: str):
         """Empties a bucket using Supabase's empty endpoint, if available."""
         empty_url = f"{self.base_url}/bucket/{bucket_name}/empty"
-        async with httpx.AsyncClient() as client:
+        async with httpx.AsyncClient(**self.client_args) as client:
             try:
                 # Some gateways require a JSON body; send an empty object to be safe
                 headers = {**self.auth_headers, "Content-Type": "application/json"}
@@ -78,7 +103,7 @@ class StorageClient:
 
     async def delete_bucket(self, bucket_name: str):
         """Empties and deletes a bucket. Best-effort empty first, then delete."""
-        async with httpx.AsyncClient() as client:
+        async with httpx.AsyncClient(**self.client_args) as client:
             # Empty first (ignore failures during empty to still attempt delete)
             try:
                 await self.empty_bucket(bucket_name)
@@ -104,28 +129,55 @@ class StorageClient:
     async def upload_file_object(
         self, file: UploadFile, bucket_name: str, object_path: str, content_type: str
     ):
-        """Uploads a file-like object to the specified storage bucket."""
-        # Note: Supabase upload URL does not include '/public'
+        """Uploads a file-like object, creating the bucket if it doesn't exist."""
         upload_url = f"{self.base_url}/object/{bucket_name}/{object_path}"
-        headers = {**self.auth_headers, "Content-Type": content_type}
+        headers = {**self.auth_headers, "Content-Type": content_type, "Connection": "close"}
 
-        async with httpx.AsyncClient() as client:
+        # Reading the content into memory once is simpler and safer for retries.
+        await file.seek(0)
+        content = await file.read()
+        await file.close()  # Explicitly close the file to release resources
+
+        async with httpx.AsyncClient(**self.client_args) as client:
             try:
-                content = await file.read()
+                # First attempt to upload
                 response = await client.post(upload_url, headers=headers, content=content)
                 response.raise_for_status()
                 logger.info(f"Successfully uploaded to {bucket_name}/{object_path}")
-            except httpx.HTTPStatusError as e:
-                error_details = e.response.text
-                logger.error(
-                    f"Failed to upload to storage: {e.response.status_code} - {error_details}"
+                return
+            except (httpx.HTTPStatusError, httpx.ReadError) as e:
+                # If it fails with 400/404, the bucket might not exist.
+                # If it fails with ReadError, it's a transient network issue.
+                # In either case, we try to ensure the bucket exists and retry once.
+                if isinstance(e, httpx.HTTPStatusError) and e.response.status_code not in (400, 404):
+                    raise
+
+                logger.warning(
+                    f"Upload failed with {type(e).__name__}, attempting to create bucket '{bucket_name}' and retry."
                 )
+                try:
+                    # Create the bucket. This handles cases where it already exists.
+                    await self._ensure_bucket_created(bucket_name, client)
+                    # Retry the upload once. The content is already in memory.
+                    response = await client.post(
+                        upload_url, headers=headers, content=content
+                    )
+                    response.raise_for_status()
+                    logger.info(
+                        f"Successfully uploaded to {bucket_name}/{object_path} on second attempt."
+                    )
+                    return
+                except Exception as retry_e:
+                    logger.error(f"Upload retry failed for '{object_path}': {retry_e}")
+                    raise retry_e from e
+            except Exception as e:
+                logger.error(f"An unexpected error occurred during upload: {e}")
                 raise
 
     async def delete_file_object(self, bucket_name: str, object_path: str) -> None:
         """Deletes a single file object from a storage bucket."""
         delete_url = f"{self.base_url}/object/{bucket_name}/{object_path}"
-        async with httpx.AsyncClient() as client:
+        async with httpx.AsyncClient(**self.client_args) as client:
             try:
                 response = await client.delete(delete_url, headers=self.auth_headers)
                 if response.status_code in (200, 204):
@@ -186,9 +238,6 @@ async def upload_picture_to_bucket(
     bucket_name = f"{settings.storage_bucket_prefix}-{layer_id}".lower()
     _, extension = os.path.splitext(file.filename)
     object_path = f"{forest_area_id}/{picture_id}{extension}"
-
-    # Ensure the bucket exists before attempting to upload
-    await storage_client.create_bucket_if_not_exists(bucket_name)
 
     # Proceed with the upload
     await storage_client.upload_file_object(
