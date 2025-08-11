@@ -108,7 +108,16 @@ async def start_storage_cleanup_worker(stop_event: asyncio.Event, interval_secon
             await process_storage_deletion_jobs()
         except Exception:
             logger.exception("Storage cleanup worker cycle failed")
+        
+        # Wait for the interval or until the stop event is set
         try:
+            # Wait for the stop_event to be set, with a timeout of interval_seconds.
+            # This makes the worker responsive to shutdown signals.
             await asyncio.wait_for(stop_event.wait(), timeout=interval_seconds)
         except asyncio.TimeoutError:
+            # This is the normal case; the timeout is reached, and we loop again.
             continue
+        except asyncio.CancelledError:
+            # The task was cancelled, likely during shutdown.
+            logger.info("Storage cleanup worker cancelled.")
+            break
