@@ -1226,3 +1226,42 @@ async def test_update_feature_pictures(
     assert pic1["id"] != pic2["id"]
     assert pic1["name"] == "new1.jpeg"
     assert pic2["name"] == "new2.jpeg"
+
+
+@pytest.mark.order(order_num + 14)
+@pytest.mark.asyncio
+async def test_update_layer_bulk_images_from_folder(
+    client: httpx.AsyncClient,
+    layer_with_feature_for_update,
+    auth_headers,
+    prod_monkeypatch_get_async_context_db,
+):
+    """Upload images for a single area using update_layer bulk_images/bulk_area_ids.
+    Images are taken from data/test_images/test_area as the frontend would send them.
+    """
+    layer_id, feature_id = layer_with_feature_for_update
+
+    images_dir = Path("data/test_images/test_area")
+    assert images_dir.exists() and images_dir.is_dir(), "images folder missing"
+
+    # Collect images (jpg/jpeg)
+    image_paths = sorted(
+        list(images_dir.glob("*.jpg")) + list(images_dir.glob("*.jpeg"))
+    )
+    assert len(image_paths) > 0, "No images found in test folder"
+
+    # Build a multipart payload including both files and repeated bulk_area_ids fields
+    files: list[tuple[str, tuple]] = []
+    for p in image_paths:
+        content = p.read_bytes()
+        files.append(("bulk_images", (p.name, content, "image/jpeg")))
+        # Include aligned area id as a separate multipart field (no filename)
+        files.append(("bulk_area_ids", (None, feature_id)))
+
+    # Send PATCH to update_layer with bulk images and aligned area ids
+    resp = await client.patch(
+        f"/layer/{layer_id}", files=files, headers=auth_headers
+    )
+    assert resp.status_code == 200, f"Bulk image upload failed: {resp.text}"
+
+    # Fetch the feature via the feature update
