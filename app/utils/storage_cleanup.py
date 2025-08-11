@@ -106,8 +106,8 @@ async def start_storage_cleanup_worker(stop_event: asyncio.Event, interval_secon
     while not stop_event.is_set():
         try:
             await process_storage_deletion_jobs()
-        except Exception as e:
-            logger.error(f"Storage cleanup worker cycle failed: {e}")
+        except Exception:
+            logger.exception("Storage cleanup worker cycle failed")
         try:
             await asyncio.wait_for(stop_event.wait(), timeout=interval_seconds)
         except asyncio.TimeoutError:
