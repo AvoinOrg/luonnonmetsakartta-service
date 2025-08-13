@@ -25,6 +25,7 @@ class ForestLayer(Base):
     updated_ts: Mapped[datetime] = mapped_column(
         TIMESTAMP(timezone=True),
         server_default=text("current_timestamp(0)"),
+        onupdate=text("current_timestamp(0)"),
     )
     is_hidden: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     col_options: Mapped[dict] = mapped_column(JSONB, nullable=False)
