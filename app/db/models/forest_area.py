@@ -33,7 +33,7 @@ class ForestArea(Base):
         onupdate=text("current_timestamp(0)"),
     )
     name: Mapped[str] = mapped_column(Text, nullable=False)
-    description: Mapped[str | None] = mapped_column(JSONB, nullable=True)
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)
     pictures: Mapped[list["Picture"]] = relationship(
         back_populates="forest_area",
         cascade="all, delete-orphan",
