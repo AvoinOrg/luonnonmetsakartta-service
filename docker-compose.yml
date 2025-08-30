@@ -54,7 +54,7 @@ services:
       # - ./.conda-pkgs:/root/conda/pkgs
       - ./.vscode-server:/root/.vscode-server
       - python-dev:/root/dev
-    entrypoint: [ "/bin/bash", "/app/docker-entrypoint.sh" ]
+    entrypoint: [ "/bin/bash", "/app/docker-entrypoint.prod.sh" ]
     networks:
       - luonnonmetsakartta-net
       - proxy-net
@@ -169,3 +169,5 @@ networks:
       # config:
       #   - subnet: "192.168.0.0/24"
       #     gateway: "192.168.0.1"
+  proxy-net:
+    external: true
