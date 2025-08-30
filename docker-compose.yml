@@ -39,6 +39,28 @@ services:
     networks:
       - luonnonmetsakartta-net
 
+  app-prod:
+    profiles: [ prod ]
+    build: .
+    env_file:
+      - ./.env
+    environment:
+      IS_PRODUCTION: True
+    # ports:
+    #   - "${DEV_PORT}:80"
+    volumes:
+      - .:/app:z
+      - ./.cache:/root/.cache
+      # - ./.conda-pkgs:/root/conda/pkgs
+      - ./.vscode-server:/root/.vscode-server
+      - python-dev:/root/dev
+    entrypoint: [ "/bin/bash", "/app/docker-entrypoint.prod.sh" ]
+    networks:
+      - luonnonmetsakartta-net
+      - proxy-net
+    labels:
+      - autoheal=true
+
   postgis-dev:
     profiles: [ dev ]
     image: kartoza/postgis:${DEV_POSTGRES_VERSION}
@@ -120,6 +142,18 @@ services:
     #     limits:
     #       memory: ${POSTGRES_CONTAINER_MEM}
 
+  autoheal:
+    profiles: [ prod ]
+    image: willfarrell/autoheal
+    environment:
+      - AUTOHEAL_CONTAINER_LABEL=autoheal
+      - DOCKER_SOCK=/var/run/docker.sock
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    restart: unless-stopped
+    networks:
+      - proxy-net
+
 volumes:
   python-dev:
     driver: local
@@ -134,3 +168,5 @@ networks:
       # config:
       #   - subnet: "192.168.0.0/24"
       #     gateway: "192.168.0.1"
+  proxy-net:
+    external: true

@@ -1,11 +1,10 @@
-// .devcontainer/devcontainer.json
+// rename to devcontainer.json
 {
     "name": "luonnonmetsakartta-service",
-    // ① Re-use your existing compose file (or chain in overrides)
     "dockerComposeFile": [
         "../docker-compose.yml"
     ],
-    "service": "app-sandbox",
+    "service": "app-dev", // try app-dev or app-sandbox
     "workspaceFolder": "/app",
     "customizations": {
         "vscode": {
@@ -33,27 +32,17 @@
             }
         }
     },
-    // "initializeCommand": "sudo groupadd -f -g $(stat -c '%g' /var/run/docker.sock) docker && sudo usermod -aG $(stat -c '%g' /var/run/docker.sock) $(id -un)",
-    // "postStartCommand": ".devcontainer/configure-env.sh",
-    "features": {
-        // "ghcr.io/devcontainers/features/docker-outside-of-docker:1": {}
-    },
-    // "initializeCommand": [
-    //   "bash",
-    //   "-c",
-    //   "SOCK=/var/run/docker.sock; GID=$(stat -c '%g' $SOCK); if ! getent group $GID >/dev/null 2>&1; then groupadd -g $GID host-docker; fi; usermod -aG $GID node"
-    // ],
     "runServices": [
-        "app-sandbox",
+        "app-dev",
         "postgis-dev",
         "postgis-test"
-    ],
-    // Mount the **stable** SSH-agent socket
-    "mounts": [
-        "type=bind,source=${localEnv:HOME}/.ssh/sockets,target=/ssh-sockets",
-        // "source=/var/run/docker.sock,target=/var/run/docker.sock,type=bind"
-    ],
-    "remoteEnv": {
-        "SSH_AUTH_SOCK": "/ssh-sockets/agent.sock"
-    }
+    ]
+    // For binding ssh agent to the container, if needed for Git (for example)
+    // "mounts": [
+    //     "type=bind,source=${localEnv:HOME}/.ssh/sockets,target=/ssh-sockets"
+    //     // "source=/var/run/docker.sock,target=/var/run/docker.sock,type=bind"
+    // ],
+    // "remoteEnv": {
+    //     "SSH_AUTH_SOCK": "/ssh-sockets/agent.sock"
+    // }
 }

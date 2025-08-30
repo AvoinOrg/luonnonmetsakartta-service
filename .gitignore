@@ -263,3 +263,5 @@ $RECYCLE.BIN/
 
 data/*
 
+.devcontainer/devcontainer.json
+
