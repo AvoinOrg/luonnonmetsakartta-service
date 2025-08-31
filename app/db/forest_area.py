@@ -3,7 +3,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 from sqlalchemy import delete, func
 from sqlalchemy.exc import SQLAlchemyError
-from sqlalchemy.orm import selectinload
+from sqlalchemy.orm import joinedload
 
 from app.db.models.forest_area import ForestArea
 from app.db.models.picture import Picture
@@ -11,7 +11,7 @@ from app.db.models.picture import Picture
 
 async def get_forest_area_by_id(db_session: AsyncSession, id: str) -> ForestArea | None:
     result = await db_session.execute(
-        select(ForestArea).options(selectinload(ForestArea.pictures)).filter_by(id=id)
+    select(ForestArea).options(joinedload(ForestArea.pictures)).filter_by(id=id)
     )
     area = result.scalars().first()
     return area if area else None
