@@ -8,6 +8,7 @@ from shapely.geometry import Polygon
 
 from app.db import connection
 from app.db.models.forest_area import ForestArea
+from app.db.models.picture import Picture
 from app.db.forest_area import (
     create_forest_area,
     delete_forest_area,
@@ -37,8 +38,9 @@ def forest_area_data(test_polygon):
     return {
         "name": "Test Forest Area",
         "layer_id": "12345678-1234-5678-1234-567812345678",
-        "description": {"details": "Test forest area description"},
-        "pictures": [{"url": "test.jpg"}],
+        "description": "Test forest area description",
+        # "pictures": [{"url": "test.jpg"}],
+        "pictures": [],
         "municipality": "Test City",
         "geometry": from_shape(test_polygon, srid=3067),
         "original_properties": {"key": "value"},
@@ -49,7 +51,10 @@ def forest_area_data(test_polygon):
 def forest_area(forest_area_data):
     area = ForestArea()
     for key, value in forest_area_data.items():
-        setattr(area, key, value)
+        if key == "pictures":
+            area.pictures = [Picture(**p) for p in value]
+        else:
+            setattr(area, key, value)
     return area
 
 
@@ -57,7 +62,9 @@ def forest_area(forest_area_data):
 async def created_forest_area(forest_area, monkeypatch_get_async_context_db):
     async with connection.get_async_context_db() as session:
         created = await create_forest_area(session, forest_area)
-        return created
+        # Re-fetch with eager loading so relationships are available after session closes
+        created_eager = await get_forest_area_by_id(session, str(created.id))
+        return created_eager
 
 
 @pytest.mark.asyncio

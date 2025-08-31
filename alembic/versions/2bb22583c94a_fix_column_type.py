@@ -114,7 +114,7 @@ def downgrade() -> None:
                existing_type=sa.Text(),
                type_=postgresql.JSONB(astext_type=sa.Text()),
                existing_nullable=True,
-               postgresql_using='description::jsonb')
+               postgresql_using='to_jsonb(description)')
 
     # 4. Recreate the views
     for view in view_defs:
