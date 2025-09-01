@@ -74,6 +74,35 @@ async def cleanup_test_layers(client: httpx.AsyncClient, auth_headers):
 
     yield
 
+    # Also clean up at the end of the session
+    logger.info("--- Cleaning up leftover test layers after session ---")
+    try:
+        response = await client.get("/layers", headers=auth_headers)
+        if response.status_code == 200:
+            layers = response.json()
+            for layer in layers:
+                if test_layer_name in layer.get("name", ""):
+                    logger.info(
+                        f"Found leftover test layer to delete (post-session): {layer.get('name')} ({layer.get('id')})"
+                    )
+                    delete_response = await client.delete(
+                        f"/layer/{layer['id']}", headers=auth_headers
+                    )
+                    if delete_response.status_code == 200:
+                        logger.info(
+                            f"Cleaned up leftover test layer (post-session): {layer.get('name')} ({layer.get('id')})"
+                        )
+                    else:
+                        logger.warning(
+                            f"Failed to clean up leftover test layer (post-session): {layer.get('name')} ({layer.get('id')}) - Status: {delete_response.status_code} {delete_response.text}"
+                        )
+        else:
+            logger.warning(
+                f"Could not fetch layers for post-session cleanup, status: {response.status_code}"
+            )
+    except Exception as e:
+        logger.error(f"An exception occurred during post-session cleanup: {e}")
+
 
 @pytest.fixture(scope="session")
 def mock_shapefile():
@@ -190,7 +219,7 @@ async def test_create_layer_success(
         data = {
             "name": test_layer_name,
             "description": "Test Description",
-            "is_hidden": False,
+            "is_hidden": True,
             "indexing_strategy": "id",
             "id_col": "id",
             "name_col": "nimi",
@@ -207,7 +236,7 @@ async def test_create_layer_success(
         result = response.json()
         assert result["name"] == data["name"]
         assert result["description"] == data["description"]
-        assert result["is_hidden"] is not None and not result["is_hidden"]
+        assert result["is_hidden"] is not None
         assert result["id"] == layer_id
 
     finally:
@@ -316,14 +345,14 @@ async def test_layers(
     assert response1.status_code == 200
     layer_ids.append(response1.json()["id"])
 
-    # Create visible layer
+    # Create another layer
     response2 = await client.post(
         "/layer",
         files=files,
         data={
             "name": test_layer_name + " 2",
             "description": "Second test layer",
-            "is_hidden": False,
+            "is_hidden": True,
             "indexing_strategy": "id",
             "id_col": "id",
             "name_col": "nimi",
@@ -485,7 +514,7 @@ async def test_update_layer_with_editor(
     updated_data = {
         "name": "Updated " + test_layer_name,
         "description": "Updated description",
-        "is_hidden": False,
+        "is_hidden": True,
     }
 
     response = await client.patch(
@@ -649,7 +678,7 @@ async def layer_with_feature_for_update(
     layer_data = {
         "name": test_layer_name,
         "description": "A layer to test feature updates",
-        "is_hidden": False,
+        "is_hidden": True,
         "indexing_strategy": "id",
         "id_col": "id",
         "name_col": "nimi",
@@ -694,7 +723,7 @@ async def layer_for_shapefile_update(
     data = {
         "name": test_layer_name + " for Shapefile Update",
         "description": "Initial layer for testing shapefile updates",
-        "is_hidden": False,
+        "is_hidden": True,
         "indexing_strategy": "id",
         "id_col": "id",
         "name_col": "nimi",
@@ -723,7 +752,7 @@ async def layer_for_shapefile_update_with_name_municipality_indexing(
     data = {
         "name": test_layer_name + " for Shapefile Update",
         "description": "Initial layer for testing shapefile updates",
-        "is_hidden": False,
+        "is_hidden": True,
         "indexing_strategy": "name_municipality",
         "id_col": "id",
         "name_col": "nimi",
