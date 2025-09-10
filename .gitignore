@@ -265,3 +265,4 @@ data/*
 
 .devcontainer/devcontainer.json
 
+.vscode
