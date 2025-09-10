@@ -59,6 +59,11 @@ services:
       - luonnonmetsakartta-net
       - proxy-net
     labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.luonnonmetsakartat-service.rule=Host(`${DOMAIN}`)"
+      - "traefik.http.routers.luonnonmetsakartat-service.entrypoints=websecure"
+      - "traefik.http.routers.luonnonmetsakartat-service.tls.certresolver=myresolver"
+      - "traefik.http.services.luonnonmetsakartat-service.loadbalancer.server.port=80"
       - autoheal=true
 
   postgis-dev:
