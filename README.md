@@ -1,6 +1,6 @@
 # Luonnonmetsäkartta Service
 
-This repository contains the FastAPI backend service for the [Luonnonmetsäkartat](https://github.com/AvoinOrg/avoin-map/tree/luonnonmetsakartat) applet on [Avoin Map](https://github.com/AvoinOrg/avoin-map). It handles data management for forest areas, layers, and images, and integrates with several external services.
+This repository contains the FastAPI backend service for the [Luonnonmetsäkartat](https://github.com/AvoinOrg/avoin-map/tree/luonnonmetsakartat) applet on [Avoin Map](https://github.com/AvoinOrg/avoin-map). Its main functionality is to handle data management of forest areas, layers, and images for administrators of the Luonnonmetsäkartat-applet. This service integrates with several external services.
 
 ## Core Technologies
 - **Framework**: [FastAPI](https://fastapi.tiangolo.com/)
