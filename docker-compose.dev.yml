@@ -1,0 +1,68 @@
+services:
+  app-dev:
+    build: .
+    env_file:
+      - ./.env
+    environment:
+      IS_PRODUCTION: False
+    ports:
+      - "${DEV_PORT}:80"
+      - "${NOTEBOOK_PORT}:8888"
+    volumes:
+      - .:/app:z
+      - ./.cache:/root/.cache
+      # - ./.conda-pkgs:/root/conda/pkgs
+      - ./.vscode-server:/root/.vscode-server
+      - python-dev:/root/dev
+    entrypoint: ["/bin/bash", "/app/docker-entrypoint.sh"]
+    networks:
+      - luonnonmetsakartta-net
+
+  postgis-dev:
+    image: kartoza/postgis:${DEV_POSTGRES_VERSION}
+    hostname: ${DEV_POSTGRES_HOST}
+    env_file:
+      - .env
+    volumes:
+      - postgis-dev:/var/lib/postgresql
+    ports:
+      - ${DEV_POSTGRES_OUT_PORT}:${DEV_POSTGRES_PORT}
+    environment:
+      POSTGRES_USER: ${DEV_POSTGRES_USER}
+      POSTGRES_DB: ${DEV_POSTGRES_DB}
+      POSTGRES_PASSWORD: ${DEV_POSTGRES_PASSWORD}
+      POSTGRES_HOST: ${DEV_POSTGRES_HOST}
+      POSTGRES_PORT: ${DEV_POSTGRES_PORT}
+      FORCE_SSL: FALSE
+    restart: unless-stopped
+    networks:
+      - luonnonmetsakartta-net
+
+  postgis-test:
+    image: kartoza/postgis:${TEST_POSTGRES_VERSION}
+    hostname: ${TEST_POSTGRES_HOST}
+    env_file:
+      - .env
+    ports:
+      - ${TEST_POSTGRES_OUT_PORT}:${TEST_POSTGRES_PORT}
+    environment:
+      POSTGRES_USER: ${TEST_POSTGRES_USER}
+      POSTGRES_DB: ${TEST_POSTGRES_DB}
+      POSTGRES_PASSWORD: ${TEST_POSTGRES_PASSWORD}
+      POSTGRES_HOST: ${TEST_POSTGRES_HOST}
+      POSTGRES_PORT: ${TEST_POSTGRES_PORT}
+      FORCE_SSL: FALSE
+    restart: unless-stopped
+    networks:
+      - luonnonmetsakartta-net
+
+volumes:
+  python-dev:
+    driver: local
+  postgis-dev:
+
+networks:
+  luonnonmetsakartta-net:
+    driver: bridge
+    ipam:
+      driver: default

@@ -2,9 +2,9 @@
 {
     "name": "luonnonmetsakartta-service",
     "dockerComposeFile": [
-        "../docker-compose.yml"
+        "../docker-compose.dev.yml"
     ],
-    "service": "app-dev", // try app-dev or app-sandbox
+    "service": "app-dev",
     "workspaceFolder": "/app",
     "customizations": {
         "vscode": {
